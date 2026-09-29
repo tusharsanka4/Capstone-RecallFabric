@@ -1,0 +1,23 @@
+name: recallfabric
+
+services:
+  db:
+    image: pgvector/pgvector:0.8.6-pg17-bookworm
+    environment:
+      POSTGRES_DB: ${RECALLFABRIC_DB_NAME:-recallfabric}
+      POSTGRES_USER: ${RECALLFABRIC_DB_USER:-recallfabric}
+      POSTGRES_PASSWORD: ${RECALLFABRIC_DB_PASSWORD:?Set RECALLFABRIC_DB_PASSWORD in .env}
+    ports:
+      - "127.0.0.1:${RECALLFABRIC_DB_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+volumes:
+  postgres_data:
