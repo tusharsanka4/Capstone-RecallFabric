@@ -1,23 +1,51 @@
-"""Memory extraction from unstructured text using AI models."""
-
 import json
-import re
-from typing import Annotated
+from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException
-from openai import AsyncOpenAI
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 
-from recallfabric.api.memories import Embedder, Database
-from recallfabric.db.models import Memory
+from recallfabric.api.memories import Database, Embedder
+from recallfabric.db.models import ApiKey, Memory
+from recallfabric.extraction.filters import filter_candidate
+from recallfabric.extraction.prompt import SYSTEM_PROMPT
+from recallfabric.memory_manager.conflicts import resolve_conflict_or_store
+from recallfabric.memory_manager.dedupe import (
+    acquire_dedupe_lock,
+    deduplicate_and_store,
+    find_duplicate_memory,
+)
+from recallfabric.memory_manager.events import record_event
+from recallfabric.providers import (
+    LLMProvider,
+    OllamaProvider,
+    ProviderBadResponse,
+    ProviderTimeout,
+    ProviderUnavailable,
+    get_extraction_provider,
+)
 from recallfabric.schemas.memory import MemoryCreate, MemoryRead, NonemptyText
+from recallfabric.security.auth import get_current_api_key, verify_user_access
+from recallfabric.security.encryption import decrypt_content, encrypt_content
 
 router = APIRouter(prefix="/extraction", tags=["extraction"])
 
-client = AsyncOpenAI(
-    base_url="http://127.0.0.1:11434/v1",
-    api_key="ollama",
-)
+client = None
+
+
+def get_llm_client(request: Request) -> Any:
+    existing = getattr(request.app.state, "extraction_provider", None)
+    if existing is not None:
+        return existing
+    legacy = getattr(request.app.state, "llm_client", None)
+    if legacy is not None:
+        return legacy
+    settings = request.app.state.settings
+    created = get_extraction_provider(settings)
+    request.app.state.extraction_provider = created
+    return created
+
+
+LLMClient = Annotated[Any, Depends(get_llm_client)]
 
 
 class MemoryExtractRequest(BaseModel):
@@ -26,163 +54,262 @@ class MemoryExtractRequest(BaseModel):
     user_id: Annotated[NonemptyText, Field(max_length=255)]
     text: NonemptyText
     source: Annotated[NonemptyText, Field(max_length=512)]
+    dry_run: bool = False
+    deduplicate: bool = True
+
+
+class RejectedCandidate(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    content: str
+    reason: str
+    type: str | None = None
+    importance: float | None = None
+    confidence: float | None = None
 
 
 class ExtractionResponse(BaseModel):
-    extracted: list[MemoryRead]
+    model_config = ConfigDict(extra="ignore")
+
+    extracted: list[MemoryRead] = Field(default_factory=list)
+    candidates: list[dict[str, Any]] = Field(default_factory=list)
+    rejected: list[RejectedCandidate] = Field(default_factory=list)
 
 
-# ── Quality filters ──────────────────────────────────────────────────────────
-_AI_PHRASES = [
-    "i don't know", "i do not know", "i'm not sure", "i am not sure",
-    "not a real person", "i cannot", "i can't", "as an ai", "as a language model",
-    "i have no information", "i have no memory", "i don't have", "i do not have",
-    "please provide", "could you clarify", "i'm unable", "i am unable",
-    "i apologize", "i am sorry", "let me know", "feel free",
-]
-_CONVERSATIONAL_PATTERNS = [
-    "user says", "user asked", "user is asking", "user is greeting",
-    "user asks", "user is inquiring", "user said hello", "how are you",
-    "what is the weather", "good morning", "good evening", "how's it going",
-]
-_QUESTION_RE = re.compile(r"\?\s*$")
-
-
-def _is_garbage(content: str) -> bool:
-    """Return True if this extracted memory should be discarded."""
-    lower = content.lower().strip()
-    if not lower:
-        return True
-    if _QUESTION_RE.search(lower):          # reject questions
-        return True
-    for phrase in _AI_PHRASES:              # reject AI-sounding output
-        if phrase in lower:
-            return True
-    for phrase in _CONVERSATIONAL_PATTERNS: # reject conversational echoes
-        if phrase in lower:
-            return True
-    if len(lower.split()) < 2:              # reject single words
-        return True
-    return False
-
-
-# ── Extraction prompt ─────────────────────────────────────────────────────────
-SYSTEM_PROMPT = """You are an expert Memory Extraction Assistant for an AI system.
-Extract atomic, declarative facts from the user's message in the third person (starting with 'User').
-Extract ONLY clear facts the user explicitly stated. Never guess, infer, or hallucinate.
-
-Rules:
-1. Extract atomic facts (e.g. "User's name is Alwin", "User lives in San Francisco", "User works as a software engineer", "User likes chicken").
-2. If multiple facts are stated in one sentence, extract each as a separate atomic memory.
-3. NEVER extract conversational messages, greetings, pleasantries, or questions (e.g. "Hello", "How are you?", "What can you do?"). Return {"memories": []} for these.
-4. Realistic confidence scores (0.60 to 0.95):
-   - 0.90 to 0.95: Direct identity, name, occupation, location assertions
-   - 0.80 to 0.88: Stated preferences, hobbies, skills, tools
-   - 0.65 to 0.75: Secondary or indirect details
-5. Realistic importance scores (0.60 to 0.95):
-   - 0.85 to 0.95: Core identity, profession, residence
-   - 0.65 to 0.80: Preferences, hobbies, skills
-
-Example 1:
-Input: "My name is Alwin and I work as a backend engineer in San Francisco."
-Output:
-{"memories": [
-  {"content": "User's name is Alwin", "type": "profile", "importance": 0.95, "confidence": 0.95, "creation_reason": "Direct self-introduction"},
-  {"content": "User works as a backend engineer", "type": "profile", "importance": 0.88, "confidence": 0.92, "creation_reason": "Stated job title"},
-  {"content": "User is located in San Francisco", "type": "profile", "importance": 0.85, "confidence": 0.90, "creation_reason": "Stated location"}
-]}
-
-Example 2:
-Input: "I really like spicy ramen and I play acoustic guitar."
-Output:
-{"memories": [
-  {"content": "User likes spicy ramen", "type": "preference", "importance": 0.72, "confidence": 0.85, "creation_reason": "Stated food preference"},
-  {"content": "User plays acoustic guitar", "type": "skill", "importance": 0.70, "confidence": 0.85, "creation_reason": "Stated musical hobby"}
-]}
-
-Example 3:
-Input: "Hello! How are you doing today?"
-Output:
-{"memories": []}
-
-Return ONLY raw JSON."""
+ApiKeyDep = Annotated[ApiKey | None, Depends(get_current_api_key)]
 
 
 @router.post("", response_model=ExtractionResponse, status_code=201)
-async def extract_memories(
+def extract_memories(
     payload: MemoryExtractRequest,
     session: Database,
     embedder: Embedder,
+    client: LLMClient,
+    request: Request,
+    api_key: ApiKeyDep = None,
 ):
+    if not payload.text.strip():
+        raise HTTPException(status_code=422, detail="Text cannot be empty")
+
+    settings = request.app.state.settings
+    verify_user_access(payload.user_id, api_key, settings)
+    enc_key = settings.encryption_key.get_secret_value() if settings.encryption_key else None
+    if isinstance(client, LLMProvider):
+        provider = client
+    else:
+        provider = OllamaProvider(client=client, model=settings.extraction_model)
+
+    user_message = f'Extract all atomic facts from this user message:\n"""\n{payload.text}\n"""'
     try:
-        user_message = (
-            'Extract all atomic facts from this user message:\n'
-            f'"""\n{payload.text}\n"""'
-        )
-        response = await client.chat.completions.create(
-            model="qwen2.5:0.5b",
+        result_content = provider.chat(
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": user_message},
             ],
-            response_format={"type": "json_object"},
-            temperature=0.0,
+            temperature=settings.extraction_temperature,
+            json_mode=True,
         )
+    except ProviderTimeout as e:
+        raise HTTPException(status_code=504, detail="LLM request timed out") from e
+    except ProviderUnavailable as e:
+        raise HTTPException(status_code=503, detail="LLM service unreachable") from e
+    except ProviderBadResponse as e:
+        raise HTTPException(status_code=502, detail=f"LLM request failed: {e}") from e
+    except Exception as e:
+        err_msg = str(e).lower()
+        if "timeout" in err_msg:
+            raise HTTPException(status_code=504, detail="LLM request timed out") from e
+        if "connect" in err_msg or "unreachable" in err_msg:
+            raise HTTPException(status_code=503, detail="LLM service unreachable") from e
+        raise HTTPException(status_code=502, detail="LLM request failed") from e
 
-        result_content = response.choices[0].message.content
-        if not result_content:
-            return ExtractionResponse(extracted=[])
+    if not result_content:
+        raise HTTPException(status_code=502, detail="LLM returned invalid JSON")
 
+    try:
         data = json.loads(result_content)
-        memories_data = data.get("memories", [])
+    except json.JSONDecodeError as e:
+        raise HTTPException(status_code=502, detail="LLM returned invalid JSON") from e
 
-        created_memories = []
-        for item in memories_data:
-            content = str(item.get("content", "")).strip().strip('"').strip("'").strip()
+    if not isinstance(data, dict):
+        raise HTTPException(status_code=502, detail="LLM returned invalid JSON")
+
+    if "memories" not in data or not isinstance(data["memories"], list):
+        raise HTTPException(status_code=502, detail="LLM returned invalid JSON")
+
+    memories_data = data["memories"]
+
+    valid_candidates = []
+    rejected_candidates = []
+
+    for item in memories_data:
+        if not isinstance(item, dict):
+            continue
+        content = str(item.get("content", "")).strip().strip('"').strip("'").strip()
+        try:
             importance = float(item.get("importance", 0.0))
             confidence = float(item.get("confidence", 0.0))
-
-            # Quality gates
-            if not content:
-                continue
-            if importance < 0.6:        # drop low-importance facts
-                continue
-            if confidence < 0.5:        # drop uncertain facts
-                continue
-            if _is_garbage(content):    # drop AI-sounding / question content / single words
-                continue
-
-            reason = str(item.get("creation_reason") or "").strip() or "Explicitly stated by user"
-            mem_type = str(item.get("type", "fact")).lower().strip()
-            if mem_type not in {"preference", "goal", "skill", "profile", "fact", "other"}:
-                mem_type = "fact"
-
-            mem_create = MemoryCreate(
-                user_id=payload.user_id,
-                content=content,
-                type=mem_type,
-                importance=importance,
-                confidence=confidence,
-                source=payload.source,
-                creation_reason=reason,
-            )
-
-            embedding = embedder.embed(mem_create.content)
-
-            with session.begin():
-                values = mem_create.model_dump(exclude={"metadata"})
-                memory = Memory(
-                    **values,
-                    attributes=mem_create.metadata,
-                    embedding=embedding.vector,
-                    embedding_model=embedding.model,
-                    embedding_dimensions=embedding.dimensions,
+        except (ValueError, TypeError):
+            rejected_candidates.append(
+                RejectedCandidate(
+                    content=content,
+                    reason="Invalid importance or confidence score",
                 )
-                session.add(memory)
-                session.flush()
-                created_memories.append(MemoryRead.model_validate(memory))
+            )
+            continue
 
-        return ExtractionResponse(extracted=created_memories)
+        mem_type = str(item.get("type", "fact")).lower().strip()
+        if mem_type not in {"preference", "goal", "skill", "profile", "fact", "other"}:
+            mem_type = "fact"
 
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Extraction failed: {str(e)}")
+        is_valid, reject_reason = filter_candidate(content, importance, confidence, settings)
+        if not is_valid:
+            rejected_candidates.append(
+                RejectedCandidate(
+                    content=content,
+                    reason=reject_reason or "Quality filter rejected",
+                    type=mem_type,
+                    importance=importance,
+                    confidence=confidence,
+                )
+            )
+            continue
+
+        reason = str(item.get("creation_reason") or "").strip() or "Explicitly stated by user"
+
+        meta = dict(item.get("metadata") or {})
+        max_snippet = settings.extraction_max_snippet_chars
+        snippet = payload.text[:max_snippet]
+        start_char = None
+        end_char = None
+        idx = payload.text.lower().find(content.lower())
+        if idx != -1:
+            start_char = idx
+            end_char = idx + len(content)
+        meta["source_id"] = payload.source
+        meta["source_reference"] = {
+            "source_id": payload.source,
+            "snippet": snippet,
+            "start_char": start_char,
+            "end_char": end_char,
+        }
+        meta["snippet"] = snippet
+        if start_char is not None:
+            meta["character_offsets"] = [start_char, end_char]
+
+        mem_create = MemoryCreate(
+            user_id=payload.user_id,
+            content=content,
+            type=mem_type,
+            importance=importance,
+            confidence=confidence,
+            source=payload.source,
+            creation_reason=reason,
+            metadata=meta,
+        )
+        valid_candidates.append(mem_create)
+
+    if payload.dry_run:
+        return ExtractionResponse(
+            extracted=[],
+            candidates=memories_data,
+            rejected=rejected_candidates,
+        )
+
+    created_memories = []
+    if valid_candidates:
+        candidates_with_embeddings = [
+            (mem_create, embedder.embed(mem_create.content)) for mem_create in valid_candidates
+        ]
+        with session.begin():
+            if payload.deduplicate:
+                acquire_dedupe_lock(session, payload.user_id)
+            for mem_create, embedding in candidates_with_embeddings:
+                if payload.deduplicate:
+                    matched, _ = find_duplicate_memory(
+                        session=session,
+                        user_id=mem_create.user_id,
+                        memory_type=mem_create.type,
+                        embedding_vector=embedding.vector,
+                        embedding_model=embedding.model,
+                        embedding_dimensions=embedding.dimensions,
+                        threshold=settings.dedupe_threshold,
+                    )
+                    if matched is not None:
+                        memory, action, matched_id = deduplicate_and_store(
+                            session=session,
+                            user_id=mem_create.user_id,
+                            content=mem_create.content,
+                            memory_type=mem_create.type,
+                            importance=mem_create.importance,
+                            confidence=mem_create.confidence,
+                            source=mem_create.source,
+                            creation_reason=mem_create.creation_reason,
+                            metadata=mem_create.metadata,
+                            embedding_vector=embedding.vector,
+                            embedding_model=embedding.model,
+                            embedding_dimensions=embedding.dimensions,
+                            threshold=settings.dedupe_threshold,
+                        )
+                        conflict_info = None
+                    else:
+                        memory, action, matched_id, conflict_info = resolve_conflict_or_store(
+                            session=session,
+                            user_id=mem_create.user_id,
+                            content=mem_create.content,
+                            memory_type=mem_create.type,
+                            importance=mem_create.importance,
+                            confidence=mem_create.confidence,
+                            source=mem_create.source,
+                            creation_reason=mem_create.creation_reason,
+                            metadata=mem_create.metadata,
+                            embedding_vector=embedding.vector,
+                            embedding_model=embedding.model,
+                            embedding_dimensions=embedding.dimensions,
+                            min_similarity=settings.conflict_min_similarity,
+                            max_similarity=settings.dedupe_threshold,
+                            llm=provider,
+                            llm_model=settings.extraction_model,
+                            llm_timeout=settings.llm_timeout,
+                        )
+                    data = MemoryRead.model_validate(memory).model_dump()
+                    data["action"] = action
+                    data["matched_memory_id"] = matched_id
+                    data["conflict_resolution"] = conflict_info
+                    if enc_key:
+                        data["content"] = decrypt_content(data["content"], enc_key)
+                    created_memories.append(MemoryRead.model_validate(data))
+                else:
+                    values = mem_create.model_dump(exclude={"metadata", "deduplicate"})
+                    if enc_key:
+                        values["content"] = encrypt_content(mem_create.content, enc_key)
+                    memory = Memory(
+                        **values,
+                        attributes=mem_create.metadata,
+                        embedding=embedding.vector,
+                        embedding_model=embedding.model,
+                        embedding_dimensions=embedding.dimensions,
+                    )
+                    session.add(memory)
+                    session.flush()
+                    record_event(
+                        session=session,
+                        user_id=mem_create.user_id,
+                        memory_id=memory.id,
+                        memory_version=memory.version,
+                        event_type="created",
+                        reason=mem_create.creation_reason,
+                        source=mem_create.source,
+                        actor="user",
+                        detail={"confidence": memory.confidence},
+                    )
+                    mem_dict = MemoryRead.model_validate(memory).model_dump()
+                    if enc_key:
+                        mem_dict["content"] = decrypt_content(mem_dict["content"], enc_key)
+                    created_memories.append(MemoryRead.model_validate(mem_dict))
+
+    return ExtractionResponse(
+        extracted=created_memories,
+        candidates=memories_data,
+        rejected=rejected_candidates,
+    )

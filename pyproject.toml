@@ -20,6 +20,8 @@ dependencies = [
     "openai>=3.22.1",
     "httpx>=0.28.1",
     "streamlit>=1.64.0",
+    "cryptography>=50.0.2",
+    "mcp>=2.3.0",
 ]
 
 [dependency-groups]
@@ -34,6 +36,7 @@ packages = ["src/recallfabric"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = [".", "src"]
 markers = ["integration: requires a running PostgreSQL database with pgvector"]
 
 [tool.ruff]
