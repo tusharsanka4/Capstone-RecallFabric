@@ -333,3 +333,29 @@ def test_database_errors_are_sanitized(api):
         assert client.get("/health").status_code == 200
     finally:
         event.remove(engine, "before_cursor_execute", fail)
+
+
+def test_disable_and_enable_endpoints(api):
+    client, _ = api
+    item = create(client).json()
+    path = f"/memories/{item['id']}"
+
+    dis_resp = client.post(f"{path}/disable", params={"user_id": "alice"})
+    assert dis_resp.status_code == 200
+    assert dis_resp.json()["status"] == "disabled"
+    assert dis_resp.json()["version"] == 2
+
+    dis_resp2 = client.post(f"{path}/disable", params={"user_id": "alice"})
+    assert dis_resp2.status_code == 200
+    assert dis_resp2.json()["status"] == "disabled"
+    assert dis_resp2.json()["version"] == 2
+
+    ena_resp = client.post(f"{path}/enable", params={"user_id": "alice"})
+    assert ena_resp.status_code == 200
+    assert ena_resp.json()["status"] == "active"
+    assert ena_resp.json()["version"] == 3
+
+    prov_resp = client.get(f"{path}/provenance", params={"user_id": "alice"})
+    assert prov_resp.status_code == 200
+    events = prov_resp.json()["events"]
+    assert [e["event_type"] for e in events] == ["created", "disabled", "enabled"]

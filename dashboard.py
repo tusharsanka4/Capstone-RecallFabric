@@ -1,25 +1,44 @@
 """RecallFabric - Claude-inspired dark mode chatbot with live memory sidebar."""
 
 import html
+import os
+
 import streamlit as st
-import httpx
-from openai import OpenAI
 
-API_URL    = "http://127.0.0.1:8000"
-OLLAMA_URL = "http://127.0.0.1:11434/v1"
-MODEL      = "qwen2.5:0.5b"
-USER_ID    = "demo_user"
-
-llm = OpenAI(base_url=OLLAMA_URL, api_key="ollama")
-
-st.set_page_config(
-    page_title="RecallFabric",
-    page_icon="🧠",
-    layout="wide",
-    initial_sidebar_state="expanded"
+from recallfabric.dashboard_client import (
+    DashboardClientError,
+    chat_with_service,
+    check_status,
+    clear_all_memories,
+    create_memory,
+    delete_memory,
+    disable_memory,
+    enable_memory,
+    fetch_memories,
+    get_memory,
+    get_memory_history,
+    get_memory_provenance,
+    preview_extraction,
+    retrieve_memories,
+    search_memories,
+    update_memory,
 )
 
-st.markdown("""
+API_URL = os.getenv("RECALLFABRIC_API_URL", "http://127.0.0.1:8000")
+OLLAMA_URL = os.getenv(
+    "RECALLFABRIC_LLM_BASE_URL", os.getenv("OLLAMA_URL", "http://127.0.0.1:11434/v1")
+)
+MODEL = os.getenv("RECALLFABRIC_CHAT_MODEL", os.getenv("MODEL", "qwen2.5:0.5b"))
+USER_ID = os.getenv("RECALLFABRIC_USER_ID", "demo_user")
+LLM_API_KEY = os.getenv("RECALLFABRIC_LLM_API_KEY", "ollama")
+API_KEY = os.getenv("RECALLFABRIC_API_KEY", "")
+
+st.set_page_config(
+    page_title="RecallFabric", page_icon="🧠", layout="wide", initial_sidebar_state="expanded"
+)
+
+st.markdown(
+    """
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
@@ -186,8 +205,8 @@ header[data-testid="stHeader"] {
 
 /* ── Main content area ── */
 .block-container {
-    max-width: 820px !important;
-    padding-top: 2rem !important;
+    max-width: 960px !important;
+    padding-top: 1.5rem !important;
     padding-bottom: 7rem !important;
     padding-left: 2rem !important;
     padding-right: 2rem !important;
@@ -195,13 +214,35 @@ header[data-testid="stHeader"] {
     background: transparent !important;
 }
 
+/* ── Tabs Styling: Claude Minimal Dark Theme ── */
+.stTabs [data-baseweb="tab-list"] {
+    background-color: #171719;
+    border-radius: 10px;
+    padding: 4px;
+    gap: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    margin-bottom: 1.5rem;
+}
+.stTabs [data-baseweb="tab"] {
+    color: #A1A1AA !important;
+    border-radius: 8px;
+    padding: 6px 18px;
+    font-size: 0.88rem;
+    font-weight: 500;
+}
+.stTabs [aria-selected="true"] {
+    background-color: #242429 !important;
+    color: #FFFFFF !important;
+    border-bottom: 2px solid #E5B869 !important;
+}
+
 /* ── Header: Claude Minimal Dark Style ── */
 .rf-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: 2rem;
-    padding-bottom: 1.2rem;
+    margin-bottom: 1.5rem;
+    padding-bottom: 1rem;
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 .rf-brand {
@@ -430,114 +471,9 @@ div[class*="stChatMessageAvatar"] {
     padding-top: 0.8rem;
 }
 </style>
-""", unsafe_allow_html=True)
-
-
-# ── Helpers ──────────────────────────────────────────────────────────────────
-def fetch_memories():
-    try:
-        r = httpx.get(f"{API_URL}/memories", params={"user_id": USER_ID, "limit": 50}, timeout=5.0)
-        if r.status_code == 200:
-            return r.json().get("items", [])
-    except Exception:
-        pass
-    return []
-
-
-def extract_memories(text):
-    try:
-        r = httpx.post(
-            f"{API_URL}/extraction",
-            json={"user_id": USER_ID, "text": text, "source": "chat_demo"},
-            timeout=60.0,
-        )
-        if r.status_code == 201:
-            return r.json().get("extracted", [])
-    except Exception:
-        pass
-    return []
-
-
-def retrieve_context(query):
-    try:
-        r = httpx.post(
-            f"{API_URL}/memories/retrieve",
-            json={"user_id": USER_ID, "query": query, "limit": 8},
-            timeout=10.0,
-        )
-        if r.status_code == 200:
-            items = r.json().get("items", [])
-            good_items = [i for i in items if i.get("importance", 0) >= 0.5]
-            final_items = good_items if good_items else items
-            if final_items:
-                ctx = "\n".join(f"- {i['content']}" for i in final_items)
-                return ctx, final_items
-    except Exception:
-        pass
-    return "", []
-
-
-def chat_with_llm(user_text, context):
-    sys_content = (
-        "You are RecallFabric, a helpful, friendly AI assistant with persistent memory. "
-        "The user is a human speaking with you. You are the AI.\n\n"
-        "Rules:\n"
-        "- When the user tells you something (like a preference, hobby, or greeting), respond conversationally, warmly, and relevantly to what they just said.\n"
-        "- When the user asks what you remember about them or asks questions about their background/details, answer directly using the Memory Notes below.\n"
-        "- Address the user as 'You' and yourself as 'I'. Keep responses concise, direct, and natural without repetitive phrases."
-    )
-
-    try:
-        history = [
-            {"role": m["role"], "content": m["content"]}
-            for m in st.session_state.messages[-6:]
-        ]
-
-        if context:
-            sys_content += f"\n\nMemory Notes about the User:\n{context}\n\nUse these notes when the user asks about their background."
-
-        messages = [{"role": "system", "content": sys_content}] + history
-        messages.append({"role": "user", "content": user_text})
-
-        resp = llm.chat.completions.create(
-            model=MODEL,
-            messages=messages,
-            temperature=0.4,
-            max_tokens=250,
-        )
-        return resp.choices[0].message.content.strip()
-    except Exception as e:
-        return f"Error: {e}"
-
-
-def clear_all_memories():
-    deleted = 0
-    try:
-        mems = fetch_memories()
-        for m in mems:
-            r = httpx.delete(
-                f"{API_URL}/memories/{m['id']}",
-                params={"user_id": USER_ID},
-                timeout=5.0,
-            )
-            if r.status_code == 204:
-                deleted += 1
-    except Exception as e:
-        return False, str(e)
-    return True, deleted
-
-
-def check_status():
-    api_ok, ollama_ok = False, False
-    try:
-        api_ok = httpx.get(f"{API_URL}/health", timeout=2).status_code == 200
-    except Exception:
-        pass
-    try:
-        ollama_ok = httpx.get("http://127.0.0.1:11434/api/tags", timeout=2).status_code == 200
-    except Exception:
-        pass
-    return api_ok, ollama_ok
+""",
+    unsafe_allow_html=True,
+)
 
 
 def render_user_message(content: str):
@@ -560,49 +496,79 @@ def render_assistant_message(content: str, retrieved=None):
                     )
 
 
-# ── Session state ──────────────────────────────────────────────────────────────
 if "messages" not in st.session_state:
     st.session_state.messages = []
 if "memories" not in st.session_state:
-    st.session_state.memories = fetch_memories()
+    try:
+        st.session_state.memories = fetch_memories(API_URL, USER_ID, limit=50)
+    except Exception:
+        st.session_state.memories = []
 if "new_ids" not in st.session_state:
     st.session_state.new_ids = set()
+if "confirm_clear_all" not in st.session_state:
+    st.session_state.confirm_clear_all = False
+if "memories_page" not in st.session_state:
+    st.session_state.memories_page = 0
 
 
-# ── Sidebar ────────────────────────────────────────────────────────────────────
 with st.sidebar:
-    st.markdown("""
+    st.markdown(
+        """
     <div class="sb-header">
         <span class="sb-title">🧠 Memory Stream</span>
         <span class="sb-user-pill">demo_user</span>
     </div>
-    """, unsafe_allow_html=True)
+    """,
+        unsafe_allow_html=True,
+    )
 
-    api_ok, ollama_ok = check_status()
-    a = '<span class="dot-ok">●</span> API'    if api_ok    else '<span class="dot-fail">○</span> API'
-    o = '<span class="dot-ok">●</span> Ollama' if ollama_ok else '<span class="dot-fail">○</span> Ollama'
-    st.markdown(f"""
+    api_ok, ollama_ok = check_status(API_URL, OLLAMA_URL)
+    a_dot = '<span class="dot-ok">●</span> API' if api_ok else '<span class="dot-fail">○</span> API'
+    o_dot = (
+        '<span class="dot-ok">●</span> Ollama'
+        if ollama_ok
+        else '<span class="dot-fail">○</span> Ollama'
+    )
+    st.markdown(
+        f"""
     <div class="status-bar">
-        <span class="status-pill">{a}</span>
-        <span class="status-pill">{o}</span>
+        <span class="status-pill">{a_dot}</span>
+        <span class="status-pill">{o_dot}</span>
     </div>
-    """, unsafe_allow_html=True)
+    """,
+        unsafe_allow_html=True,
+    )
 
     c1, c2 = st.columns(2)
     with c1:
         if st.button("↻ Refresh", use_container_width=True):
-            st.session_state.memories = fetch_memories()
+            try:
+                st.session_state.memories = fetch_memories(API_URL, USER_ID, limit=50)
+            except Exception:
+                pass
             st.session_state.new_ids = set()
             st.rerun()
     with c2:
         if st.button("✕ Clear", use_container_width=True):
-            ok, result = clear_all_memories()
-            if ok:
-                st.session_state.memories = []
-                st.session_state.new_ids = set()
+            st.session_state.confirm_clear_all = True
+
+    if st.session_state.confirm_clear_all:
+        st.warning("Clear all memories for this user?")
+        cyes, cno = st.columns(2)
+        with cyes:
+            if st.button("Yes, Clear", key="sb_confirm_yes", use_container_width=True):
+                ok, result = clear_all_memories(API_URL, USER_ID)
+                st.session_state.confirm_clear_all = False
+                if ok:
+                    st.session_state.memories = []
+                    st.session_state.new_ids = set()
+                    st.rerun()
+                else:
+                    st.error(str(result))
+        with cno:
+            if st.button("Cancel", key="sb_confirm_no", use_container_width=True):
+                st.session_state.confirm_clear_all = False
                 st.rerun()
-            else:
-                st.error(str(result))
 
     st.markdown("---")
 
@@ -612,31 +578,37 @@ with st.sidebar:
     else:
         st.caption(f"{len(memories)} stored memories")
         for mem in reversed(memories):
-            is_new   = mem["id"] in st.session_state.new_ids
-            badge    = '<span class="badge-new">NEW</span>' if is_new else ""
+            is_new = mem["id"] in st.session_state.new_ids
+            badge = '<span class="badge-new">NEW</span>' if is_new else ""
             mem_type = mem.get("type", "fact")
-            content  = mem.get("content", "")
-            imp      = mem.get("importance", 0)
-            date     = mem.get("created_at", "")[:10]
-            st.markdown(f"""<div class="mem-card">
+            content = mem.get("content", "")
+            imp = mem.get("importance", 0)
+            date = mem.get("created_at", "")[:10]
+            st.markdown(
+                f"""<div class="mem-card">
 <div class="mem-tag-row">
     <span class="mem-tag">{mem_type}</span>
     {badge}
 </div>
 <div class="mem-text">{content}</div>
 <div class="mem-meta">confidence {imp:.0%} &middot; {date}</div>
-</div>""", unsafe_allow_html=True)
+</div>""",
+                unsafe_allow_html=True,
+            )
 
-    st.markdown("""
+    st.markdown(
+        """
     <div class="sidebar-disclaimer">
       RecallFabric &middot; Local Memory AI<br>
       PostgreSQL &middot; FastEmbed &middot; Ollama
     </div>
-    """, unsafe_allow_html=True)
+    """,
+        unsafe_allow_html=True,
+    )
 
 
-# ── Main Area ──────────────────────────────────────────────────────────────────
-st.markdown("""
+st.markdown(
+    """
 <div class="rf-header">
   <div class="rf-brand">
     <div class="rf-avatar">🧠</div>
@@ -647,63 +619,400 @@ st.markdown("""
   </div>
   <div class="rf-badge">Memory Active</div>
 </div>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
 
-# Render history
-for msg in st.session_state.messages:
-    if msg["role"] == "user":
-        render_user_message(msg["content"])
-    else:
-        render_assistant_message(msg["content"], msg.get("retrieved"))
+tab_chat, tab_memories = st.tabs(["💬 Chat", "🧠 Memories"])
 
-# Welcome state
-if not st.session_state.messages:
-    with st.chat_message("assistant"):
-        st.markdown(
-            "Hi! I'm your AI assistant with persistent memory. "
-            "Tell me things about yourself and I'll remember them across conversations. "
-            "Watch the **sidebar** update live as I learn about you."
+with tab_chat:
+    for msg in st.session_state.messages:
+        if msg["role"] == "user":
+            render_user_message(msg["content"])
+        else:
+            render_assistant_message(msg["content"], msg.get("retrieved"))
+
+    if not st.session_state.messages:
+        with st.chat_message("assistant"):
+            st.markdown(
+                "Hi! I'm your AI assistant with persistent memory. "
+                "Tell me things about yourself and I'll remember them across conversations. "
+                "Watch the **sidebar** update live as I learn about you."
+            )
+
+    prompt = st.chat_input("Message RecallFabric...")
+    if prompt:
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        render_user_message(prompt)
+
+        with st.chat_message("assistant"):
+            ph = st.empty()
+            ph.markdown('<span class="thinking">Thinking...</span>', unsafe_allow_html=True)
+            history = [
+                {"role": m["role"], "content": m["content"]} for m in st.session_state.messages[:-1]
+            ]
+            reply, retrieved_items, new_mems = chat_with_service(
+                API_URL, USER_ID, prompt, history, extract=True
+            )
+            ph.empty()
+
+            st.markdown(reply)
+            if retrieved_items:
+                with st.expander("🧠 Memory context used"):
+                    for item in retrieved_items:
+                        st.markdown(
+                            f'<div class="ctx-box">📌 {item["content"]}</div>',
+                            unsafe_allow_html=True,
+                        )
+
+        st.session_state.messages.append(
+            {
+                "role": "assistant",
+                "content": reply,
+                "retrieved": retrieved_items,
+            }
         )
 
-# ── Chat input ─────────────────────────────────────────────────────────────────
-prompt = st.chat_input("Message RecallFabric...")
+        try:
+            st.session_state.memories = fetch_memories(API_URL, USER_ID, limit=50)
+        except Exception:
+            pass
+        st.session_state.new_ids = {m["id"] for m in new_mems}
+        st.rerun()
 
-if prompt:
-    st.session_state.messages.append({"role": "user", "content": prompt})
-    render_user_message(prompt)
-
-    with st.chat_message("assistant"):
-        ph = st.empty()
-
-        # Step 1: Retrieve prior memory context before adding current turn
-        ph.markdown('<span class="thinking">Searching memory...</span>', unsafe_allow_html=True)
-        context, retrieved_items = retrieve_context(prompt)
-
-        # Step 2: Generate response using prior memory
-        ph.markdown('<span class="thinking">Thinking...</span>', unsafe_allow_html=True)
-        reply = chat_with_llm(prompt, context)
-        ph.empty()
-
-        st.markdown(reply)
-        if retrieved_items:
-            with st.expander("🧠 Memory context used"):
-                for item in retrieved_items:
-                    st.markdown(
-                        f'<div class="ctx-box">📌 {item["content"]}</div>',
-                        unsafe_allow_html=True,
+with tab_memories:
+    with st.expander("➕ Create New Memory", expanded=False):
+        with st.form("create_memory_form", clear_on_submit=True):
+            new_content = st.text_area("Content", placeholder="e.g. User prefers espresso")
+            col_t1, col_t2 = st.columns(2)
+            with col_t1:
+                new_type = st.selectbox(
+                    "Type",
+                    ["preference", "fact", "goal", "skill", "profile", "other"],
+                )
+                new_imp = st.slider("Importance", 0.0, 1.0, 0.7, 0.05)
+            with col_t2:
+                new_src = st.text_input("Source", value="dashboard")
+                new_conf = st.slider("Confidence", 0.0, 1.0, 1.0, 0.05)
+            new_reason = st.text_input("Creation Reason (optional)")
+            new_dedupe = st.checkbox("Deduplicate / Consolidate against existing", value=False)
+            create_submitted = st.form_submit_button("Create Memory")
+            if create_submitted and new_content.strip():
+                try:
+                    res = create_memory(
+                        api_url=API_URL,
+                        user_id=USER_ID,
+                        content=new_content.strip(),
+                        memory_type=new_type,
+                        importance=new_imp,
+                        confidence=new_conf,
+                        source=new_src,
+                        creation_reason=new_reason.strip() or None,
+                        deduplicate=new_dedupe,
                     )
+                    st.success(f"Memory created (v{res['version']})!")
+                    st.session_state.memories = fetch_memories(API_URL, USER_ID, limit=50)
+                    st.rerun()
+                except DashboardClientError as exc:
+                    st.error(f"Creation failed: {exc.detail}")
 
-        # Step 3: Extract & store new facts from this turn for future turns
-        new_mems = extract_memories(prompt)
+    st.subheader("🔍 Search Memories")
+    col_s1, col_s2 = st.columns([3, 1])
+    with col_s1:
+        search_query = st.text_input(
+            "Search query",
+            placeholder="Search your memories...",
+            label_visibility="collapsed",
+        )
+    with col_s2:
+        plain_text_toggle = st.toggle("Plain-text search", value=False)
 
-    st.session_state.messages.append({
-        "role": "assistant",
-        "content": reply,
-        "retrieved": retrieved_items,
-    })
+    if search_query.strip():
+        if plain_text_toggle:
+            st.caption("Using plain-text substring search (/memories/search)")
+            try:
+                search_results = search_memories(
+                    api_url=API_URL,
+                    user_id=USER_ID,
+                    query=search_query.strip(),
+                )
+                if not search_results:
+                    st.info("No matching memories found.")
+                else:
+                    for sm in search_results:
+                        st.markdown(
+                            f"**[{sm['type']}]** {sm['content']} "
+                            f"`v{sm['version']}` &middot; {sm['status']}"
+                        )
+            except DashboardClientError as exc:
+                st.error(f"Search failed: {exc.detail}")
+        else:
+            st.caption("Using semantic retrieval with scoring (/memories/retrieve)")
+            try:
+                retrieved_results = retrieve_memories(
+                    api_url=API_URL,
+                    user_id=USER_ID,
+                    query=search_query.strip(),
+                    track_access=True,
+                )
+                if not retrieved_results:
+                    st.info("No memories met retrieval threshold.")
+                else:
+                    for rm in retrieved_results:
+                        sc = rm.get("score", 0.0)
+                        bd = rm.get("score_breakdown", {})
+                        st.markdown(f"**[{rm['type']}]** {rm['content']} (Score: `{sc:.3f}`)")
+                        if bd:
+                            st.caption(
+                                f"Relevance: {bd.get('relevance', 0):.2f} | "
+                                f"Importance: {bd.get('importance', 0):.2f} | "
+                                f"Confidence: {bd.get('confidence', 0):.2f} | "
+                                f"Recency: {bd.get('recency', 0):.2f} | "
+                                f"Frequency: {bd.get('frequency', 0):.2f}"
+                            )
+            except DashboardClientError as exc:
+                st.error(f"Retrieval failed: {exc.detail}")
 
-    # Step 4: Update sidebar with new memories
-    st.session_state.memories = fetch_memories()
-    st.session_state.new_ids = {m["id"] for m in new_mems}
+    st.markdown("---")
 
-    st.rerun()
+    st.subheader("📋 Memory Catalog")
+    col_f1, col_f2, col_f3 = st.columns([2, 2, 2])
+    with col_f1:
+        filter_type = st.selectbox(
+            "Filter Type",
+            ["All", "preference", "fact", "goal", "skill", "profile", "other"],
+        )
+    with col_f2:
+        filter_status = st.selectbox("Filter Status", ["All", "active", "disabled"])
+    with col_f3:
+        page_size = st.selectbox("Page Size", [10, 20, 50], index=0)
+
+    try:
+        active_type = None if filter_type == "All" else filter_type
+        active_status = None if filter_status == "All" else filter_status
+        catalog_memories = fetch_memories(
+            api_url=API_URL,
+            user_id=USER_ID,
+            limit=page_size,
+            offset=st.session_state.memories_page * page_size,
+            memory_type=active_type,
+            status=active_status,
+        )
+    except Exception as exc:
+        catalog_memories = []
+        st.error(f"Failed to fetch memories: {exc}")
+
+    if catalog_memories:
+        table_rows = []
+        for m in catalog_memories:
+            table_rows.append(
+                {
+                    "Content": m.get("content", ""),
+                    "Type": m.get("type", ""),
+                    "Importance": f"{m.get('importance', 0):.2f}",
+                    "Confidence": f"{m.get('confidence', 0):.2f}",
+                    "Status": m.get("status", ""),
+                    "Version": m.get("version", 1),
+                    "Updated": str(m.get("updated_at", ""))[:19],
+                    "ID": m.get("id", ""),
+                }
+            )
+        st.dataframe(table_rows, use_container_width=True)
+
+        col_p1, col_p2, col_p3 = st.columns([1, 2, 1])
+        with col_p1:
+            if st.button("◀ Previous", disabled=st.session_state.memories_page <= 0):
+                st.session_state.memories_page -= 1
+                st.rerun()
+        with col_p2:
+            st.markdown(
+                f"<div style='text-align:center;'>Page {st.session_state.memories_page + 1}</div>",
+                unsafe_allow_html=True,
+            )
+        with col_p3:
+            if st.button("Next ▶", disabled=len(catalog_memories) < page_size):
+                st.session_state.memories_page += 1
+                st.rerun()
+
+        st.markdown("### Manage Selected Memory")
+        sel_idx = st.selectbox(
+            "Select Memory to inspect or modify",
+            range(len(catalog_memories)),
+            format_func=lambda i: (
+                f"v{catalog_memories[i]['version']} "
+                f"[{catalog_memories[i]['status']}] "
+                f"{catalog_memories[i]['content'][:60]}... "
+                f"({catalog_memories[i]['id'][:8]})"
+            ),
+        )
+        cur_mem = catalog_memories[sel_idx]
+        mid = cur_mem["id"]
+        mver = cur_mem["version"]
+
+        col_m1, col_m2 = st.columns(2)
+        with col_m1:
+            if cur_mem["status"] == "active":
+                if st.button("🚫 Disable Memory", key=f"dis_{mid}", use_container_width=True):
+                    try:
+                        disable_memory(API_URL, USER_ID, mid)
+                        st.success("Memory disabled.")
+                        st.session_state.memories = fetch_memories(API_URL, USER_ID)
+                        st.rerun()
+                    except DashboardClientError as exc:
+                        st.error(f"Disable failed: {exc.detail}")
+            else:
+                if st.button("✅ Enable Memory", key=f"ena_{mid}", use_container_width=True):
+                    try:
+                        enable_memory(API_URL, USER_ID, mid)
+                        st.success("Memory re-enabled.")
+                        st.session_state.memories = fetch_memories(API_URL, USER_ID)
+                        st.rerun()
+                    except DashboardClientError as exc:
+                        st.error(f"Enable failed: {exc.detail}")
+
+        with col_m2:
+            del_confirm = st.checkbox("Confirm permanent deletion", key=f"del_chk_{mid}")
+            if st.button(
+                "🗑️ Delete Memory",
+                key=f"del_{mid}",
+                disabled=not del_confirm,
+                use_container_width=True,
+            ):
+                try:
+                    delete_memory(API_URL, USER_ID, mid)
+                    st.success("Memory deleted.")
+                    st.session_state.memories = fetch_memories(API_URL, USER_ID)
+                    st.rerun()
+                except DashboardClientError as exc:
+                    st.error(f"Delete failed: {exc.detail}")
+
+        with st.expander("✏️ Edit Memory Content / Attributes"):
+            with st.form(f"edit_form_{mid}"):
+                edit_content = st.text_area("Content", value=cur_mem.get("content", ""))
+                c_e1, c_e2 = st.columns(2)
+                type_opts = ["preference", "fact", "goal", "skill", "profile", "other"]
+                cur_t = cur_mem.get("type", "fact")
+                t_idx = type_opts.index(cur_t) if cur_t in type_opts else 0
+                with c_e1:
+                    edit_type = st.selectbox("Type", type_opts, index=t_idx)
+                    edit_imp = st.slider(
+                        "Importance", 0.0, 1.0, float(cur_mem.get("importance", 0.5)), 0.05
+                    )
+                with c_e2:
+                    edit_conf = st.slider(
+                        "Confidence", 0.0, 1.0, float(cur_mem.get("confidence", 1.0)), 0.05
+                    )
+                    status_opts = ["active", "disabled"]
+                    cur_s = cur_mem.get("status", "active")
+                    s_idx = status_opts.index(cur_s) if cur_s in status_opts else 0
+                    edit_status = st.selectbox("Status", status_opts, index=s_idx)
+                edit_src = st.text_input("Source", value=cur_mem.get("source", "dashboard"))
+                edit_reason = st.text_input(
+                    "Creation Reason", value=cur_mem.get("creation_reason") or ""
+                )
+
+                if st.form_submit_button("💾 Save Changes"):
+                    try:
+                        up_res = update_memory(
+                            api_url=API_URL,
+                            user_id=USER_ID,
+                            memory_id=mid,
+                            expected_version=mver,
+                            content=edit_content,
+                            memory_type=edit_type,
+                            importance=edit_imp,
+                            confidence=edit_conf,
+                            source=edit_src,
+                            creation_reason=edit_reason.strip() or None,
+                            status=edit_status,
+                        )
+                        st.success(f"Updated memory to v{up_res['version']}!")
+                        st.session_state.memories = fetch_memories(API_URL, USER_ID)
+                        st.rerun()
+                    except DashboardClientError as exc:
+                        if exc.status_code == 409:
+                            st.warning(
+                                "⚠️ Version conflict (409): memory was changed. "
+                                "Reloading latest version..."
+                            )
+                            try:
+                                get_memory(API_URL, USER_ID, mid)
+                                st.session_state.memories = fetch_memories(API_URL, USER_ID)
+                                st.rerun()
+                            except Exception as e:
+                                st.error(f"Reload failed: {e}")
+                        else:
+                            st.error(f"Update failed: {exc.detail}")
+
+        with st.expander("📜 Version History (/versions)"):
+            try:
+                hist_items = get_memory_history(API_URL, USER_ID, mid)
+                if not hist_items:
+                    st.info("No prior versions.")
+                else:
+                    for h in hist_items:
+                        st.markdown(
+                            f"**v{h['version']}** ({h['status']}) &middot; "
+                            f"{h.get('updated_at', '')[:19]}<br>"
+                            f"*{h['content']}*<br>"
+                            f"<small>Reason: {h.get('creation_reason')} | "
+                            f"Source: {h.get('source')}</small>",
+                            unsafe_allow_html=True,
+                        )
+                        st.markdown("---")
+            except DashboardClientError as exc:
+                st.error(f"Failed to fetch history: {exc.detail}")
+
+        with st.expander("🔍 Provenance Feed (/provenance)"):
+            try:
+                prov_items = get_memory_provenance(API_URL, USER_ID, mid)
+                if not prov_items:
+                    st.info("No provenance events recorded.")
+                else:
+                    for ev in prov_items:
+                        st.markdown(
+                            f"**{ev['event_type'].upper()}** &middot; "
+                            f"rev v{ev.get('memory_version')} &middot; "
+                            f"{str(ev.get('created_at', ''))[:19]}<br>"
+                            f"Actor: `{ev.get('actor')}` | Reason: {ev.get('reason')}<br>"
+                            f"<small>Detail: {ev.get('detail')}</small>",
+                            unsafe_allow_html=True,
+                        )
+                        st.markdown("---")
+            except DashboardClientError as exc:
+                st.error(f"Failed to fetch provenance: {exc.detail}")
+    else:
+        st.info("No memories found matching current filter.")
+
+    st.markdown("---")
+
+    st.subheader("🔬 Extraction Preview Panel")
+    st.caption("Preview candidate memories extracted by LLM without saving (dry_run=true).")
+    preview_text = st.text_area(
+        "Sample text to extract from",
+        height=90,
+        placeholder="I work at Acme Corp. I prefer dark roast coffee and I want to learn Rust.",
+    )
+    if st.button("Preview Extraction"):
+        if preview_text.strip():
+            with st.spinner("Extracting candidates..."):
+                try:
+                    p_res = preview_extraction(API_URL, USER_ID, preview_text.strip())
+                    candidates = p_res.get("candidates", [])
+                    rejected = p_res.get("rejected", [])
+                    st.markdown(f"**Found {len(candidates)} candidate(s)**")
+                    for c in candidates:
+                        st.markdown(
+                            f"✅ **[{c.get('type', 'fact')}]** {c.get('content')} "
+                            f"(Imp: `{c.get('importance')}`, Conf: `{c.get('confidence')}`)"
+                        )
+                    if rejected:
+                        st.markdown(f"**Rejected {len(rejected)} candidate(s)**")
+                        for r in rejected:
+                            st.markdown(
+                                f"❌ *{r.get('content')}* &mdash; **Reason**: `{r.get('reason')}`"
+                            )
+                except DashboardClientError as exc:
+                    st.error(f"Extraction preview failed: {exc.detail}")
+        else:
+            st.warning("Please enter some text to preview extraction.")
