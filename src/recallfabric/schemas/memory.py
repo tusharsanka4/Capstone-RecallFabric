@@ -66,3 +66,23 @@ class MemoryPage(BaseModel):
     limit: int
     offset: int
     has_more: bool
+
+
+class MemoryRetrieve(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    user_id: Annotated[NonemptyText, Field(max_length=255)]
+    query: Annotated[NonemptyText, Field(max_length=1000)]
+    type: MemoryType | None = None
+    status: Literal["active", "disabled"] = "active"
+    limit: int = Field(default=20, ge=1, le=100)
+
+
+class MemoryRanked(MemoryRead):
+    score: float
+
+
+class MemoryRankedPage(BaseModel):
+    items: list[MemoryRanked]
+    limit: int
+    has_more: bool

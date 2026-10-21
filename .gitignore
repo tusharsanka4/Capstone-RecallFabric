@@ -16,3 +16,5 @@ build/
 !.env.example
 .idea/
 .vscode/
+
+ollama.zip

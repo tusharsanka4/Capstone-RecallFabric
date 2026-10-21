@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 from recallfabric.api.embeddings import router as embeddings_router
 from recallfabric.api.health import router as health_router
 from recallfabric.api.memories import router as memories_router
+from recallfabric.api.extraction import router as extraction_router
 from recallfabric.core.config import Settings
 from recallfabric.db.connection import create_database_engine
 from recallfabric.embeddings.service import EmbeddingUnavailable, LocalEmbeddingProvider
@@ -47,4 +48,5 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(health_router)
     app.include_router(memories_router)
     app.include_router(embeddings_router)
+    app.include_router(extraction_router)
     return app

@@ -18,6 +18,9 @@ from recallfabric.schemas.memory import (
     MemorySearch,
     MemoryType,
     MemoryUpdate,
+    MemoryRetrieve,
+    MemoryRanked,
+    MemoryRankedPage,
 )
 
 router = APIRouter(prefix="/memories", tags=["memories"])
@@ -113,6 +116,45 @@ def search_memories(payload: MemorySearch, session: Database):
         statement = statement.where(Memory.type == payload.type)
     with session.begin():
         return page(session, statement, payload.limit, payload.offset)
+
+
+@router.post("/retrieve", response_model=MemoryRankedPage)
+def retrieve_memories(payload: MemoryRetrieve, session: Database, embedder: Embedder):
+    """Semantic retrieval and memory ranking."""
+    query_embedding = embedder.embed(payload.query, kind="query")
+    
+    # Milestone 6 & 7: Semantic Search and Ranking
+    # Final Score = semantic relevance + importance + confidence
+    semantic_relevance = 1.0 - Memory.embedding.cosine_distance(query_embedding.vector)
+    score_expr = semantic_relevance + Memory.importance + Memory.confidence
+    
+    statement = (
+        select(Memory, score_expr.label("score"))
+        .where(
+            Memory.user_id == payload.user_id,
+            Memory.status == payload.status,
+            Memory.embedding_model == embedder.model_id,
+            Memory.embedding_dimensions == embedder.dimensions,
+        )
+    )
+    if payload.type is not None:
+        statement = statement.where(Memory.type == payload.type)
+        
+    statement = statement.order_by(score_expr.desc()).limit(payload.limit)
+    
+    with session.begin():
+        rows = session.execute(statement).all()
+        items = []
+        for memory, score in rows:
+            mem_dict = MemoryRead.model_validate(memory).model_dump()
+            mem_dict["score"] = score
+            items.append(MemoryRanked.model_validate(mem_dict))
+            
+        return MemoryRankedPage(
+            items=items,
+            limit=payload.limit,
+            has_more=False
+        )
 
 
 @router.get("/{memory_id}", response_model=MemoryRead)
