@@ -2,7 +2,7 @@
 
 import math
 from threading import Lock
-from typing import Literal, Protocol
+from typing import Any, Literal, Protocol
 
 from fastapi import Request
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -86,6 +86,102 @@ class LocalEmbeddingProvider:
             return EmbeddingResult(model=self.model_id, dimensions=self.dimensions, vector=vector)
         except Exception:
             raise EmbeddingUnavailable() from None
+
+
+class OpenAIEmbeddingProvider:
+    def __init__(self, settings: Settings, client: Any = None):
+        self.settings = settings
+        self.model = settings.openai_embedding_model
+        self.model_id = f"openai:{self.model}"
+        self.dimensions = settings.openai_embedding_dimensions
+        self._client = client
+
+    def _get_client(self):
+        if self._client is not None:
+            return self._client
+        import httpx
+
+        return httpx.Client(
+            base_url=self.settings.openai_base_url,
+            headers={"Authorization": f"Bearer {self.settings.openai_api_key.get_secret_value()}"},
+            timeout=self.settings.llm_timeout,
+        )
+
+    def embed(self, text: str, kind: EmbeddingKind = "passage") -> EmbeddingResult:
+        if not text.strip():
+            raise ValueError("Embedding input must not be blank")
+        try:
+            client = self._get_client()
+            if hasattr(client, "embeddings") and hasattr(client.embeddings, "create"):
+                resp = client.embeddings.create(input=text, model=self.model)
+                vector = [float(v) for v in resp.data[0].embedding]
+            else:
+                resp = client.post("/embeddings", json={"input": text, "model": self.model})
+                resp.raise_for_status()
+                data = resp.json()
+                vector = [float(v) for v in data["data"][0]["embedding"]]
+
+            if len(vector) != self.dimensions:
+                raise ValueError(f"Expected {self.dimensions} dimensions, got {len(vector)}")
+            if not all(math.isfinite(v) for v in vector):
+                raise ValueError("Non-finite embedding")
+            return EmbeddingResult(model=self.model_id, dimensions=self.dimensions, vector=vector)
+        except Exception:
+            raise EmbeddingUnavailable() from None
+
+
+class GeminiEmbeddingProvider:
+    def __init__(self, settings: Settings, client: Any = None):
+        self.settings = settings
+        self.model = settings.gemini_embedding_model
+        self.model_id = f"gemini:{self.model}"
+        self.dimensions = settings.gemini_embedding_dimensions
+        self._client = client
+
+    def _get_client(self):
+        if self._client is not None:
+            return self._client
+        import httpx
+
+        return httpx.Client(timeout=self.settings.llm_timeout)
+
+    def embed(self, text: str, kind: EmbeddingKind = "passage") -> EmbeddingResult:
+        if not text.strip():
+            raise ValueError("Embedding input must not be blank")
+        try:
+            client = self._get_client()
+            key = self.settings.gemini_api_key.get_secret_value()
+            url = f"{self.settings.gemini_base_url}/models/{self.model}:embedContent"
+            params = {"key": key} if key else {}
+            task_type = "RETRIEVAL_QUERY" if kind == "query" else "RETRIEVAL_DOCUMENT"
+            payload = {
+                "model": f"models/{self.model}",
+                "content": {"parts": [{"text": text}]},
+                "taskType": task_type,
+            }
+            resp = client.post(url, params=params, json=payload)
+            resp.raise_for_status()
+            data = resp.json()
+            vector = [float(v) for v in data["embedding"]["values"]]
+
+            if len(vector) != self.dimensions:
+                raise ValueError(f"Expected {self.dimensions} dimensions, got {len(vector)}")
+            if not all(math.isfinite(v) for v in vector):
+                raise ValueError("Non-finite embedding")
+            return EmbeddingResult(model=self.model_id, dimensions=self.dimensions, vector=vector)
+        except Exception:
+            raise EmbeddingUnavailable() from None
+
+
+def create_embedding_provider(settings: Settings, client: Any = None) -> EmbeddingProvider:
+    provider = settings.embedding_provider.lower().strip()
+    if provider == "fastembed":
+        return LocalEmbeddingProvider(settings)
+    if provider == "openai":
+        return OpenAIEmbeddingProvider(settings, client=client)
+    if provider == "gemini":
+        return GeminiEmbeddingProvider(settings, client=client)
+    raise ValueError(f"Unsupported embedding provider: {provider}")
 
 
 def get_embedding_provider(request: Request) -> EmbeddingProvider:

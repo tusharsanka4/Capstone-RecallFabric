@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "recallfabric": {
+      "url": "https://api.recallfabric.example.com/mcp",
+      "headers": {
+        "Authorization": "Bearer YOUR_RECALLFABRIC_API_KEY"
+      }
+    }
+  }
+}

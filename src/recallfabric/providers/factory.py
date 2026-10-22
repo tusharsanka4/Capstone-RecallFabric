@@ -35,6 +35,11 @@ def get_provider(
         settings = Settings()
     ptype = (provider_type or settings.llm_provider).lower().strip()
     if ptype == "ollama":
+        if settings.environment == "production":
+            raise ValueError(
+                "Ollama provider cannot be used when RECALLFABRIC_ENVIRONMENT=production. "
+                "Configure a hosted provider (openai, anthropic, or gemini)."
+            )
         return OllamaProvider(
             base_url=settings.llm_base_url,
             api_key=settings.llm_api_key.get_secret_value(),

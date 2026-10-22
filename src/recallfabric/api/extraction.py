@@ -79,7 +79,12 @@ class ExtractionResponse(BaseModel):
 ApiKeyDep = Annotated[ApiKey | None, Depends(get_current_api_key)]
 
 
-@router.post("", response_model=ExtractionResponse, status_code=201)
+@router.post(
+    "",
+    response_model=ExtractionResponse,
+    status_code=201,
+    operation_id="extract_memories",
+)
 def extract_memories(
     payload: MemoryExtractRequest,
     session: Database,

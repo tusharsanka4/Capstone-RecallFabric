@@ -1,0 +1,35 @@
+services:
+  - type: web
+    name: recallfabric-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    plan: starter # Free tier (512MB RAM) risks OOM with local FastEmbed; 1GB+ recommended or use RECALLFABRIC_EMBEDDING_PROVIDER=openai
+    region: oregon
+    healthCheckPath: /health
+    envVars:
+      - key: RECALLFABRIC_ENVIRONMENT
+        value: production
+      - key: RECALLFABRIC_DATABASE_URL
+        sync: false # Secret: Managed PostgreSQL URL (Neon pooled string or Supabase pooler)
+      - key: RECALLFABRIC_DB_SSLMODE
+        value: require
+      - key: RECALLFABRIC_RUN_MIGRATIONS
+        value: "true"
+      - key: RECALLFABRIC_WORKERS
+        value: "1"
+      - key: RECALLFABRIC_AUTH_ENABLED
+        value: "true"
+      - key: RECALLFABRIC_ADMIN_TOKEN
+        generateValue: true # Secret: Master admin bearer token
+      - key: RECALLFABRIC_ENCRYPTION_KEY
+        generateValue: true # Secret: Encryption key for sensitive fields
+      - key: RECALLFABRIC_CORS_ORIGINS
+        value: "*"
+      - key: RECALLFABRIC_LLM_PROVIDER
+        value: openai # Hosted LLM required in production (openai, anthropic, or gemini)
+      - key: RECALLFABRIC_OPENAI_API_KEY
+        sync: false # Secret: OpenAI API key
+      - key: RECALLFABRIC_OPENAI_MODEL
+        value: gpt-4o-mini
+      - key: RECALLFABRIC_EMBEDDING_PROVIDER
+        value: fastembed # Options: fastembed, openai, gemini

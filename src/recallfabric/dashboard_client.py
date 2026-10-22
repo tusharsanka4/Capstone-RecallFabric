@@ -342,3 +342,87 @@ def check_status(
     except Exception:
         pass
     return api_ok, ollama_ok
+
+
+def list_api_keys(
+    api_url: str,
+    admin_token: str | None = None,
+    user_id: str | None = None,
+    client: httpx.Client | None = None,
+) -> list[dict[str, Any]]:
+    c = _get_client(client, timeout=10.0)
+    headers = {"X-Admin-Token": admin_token} if admin_token else {}
+    params = {"user_id": user_id} if user_id else {}
+    r = c.get(f"{api_url}/v1/auth/keys", headers=headers, params=params)
+    _handle_response(r)
+    return r.json()
+
+
+def create_api_key(
+    api_url: str,
+    user_id: str,
+    name: str = "default",
+    admin_token: str | None = None,
+    client: httpx.Client | None = None,
+) -> dict[str, Any]:
+    c = _get_client(client, timeout=10.0)
+    headers = {"X-Admin-Token": admin_token} if admin_token else {}
+    r = c.post(
+        f"{api_url}/v1/auth/keys",
+        headers=headers,
+        json={"user_id": user_id, "name": name},
+    )
+    _handle_response(r)
+    return r.json()
+
+
+def revoke_api_key(
+    api_url: str,
+    key_id: str,
+    admin_token: str | None = None,
+    client: httpx.Client | None = None,
+) -> bool:
+    c = _get_client(client, timeout=10.0)
+    headers = {"X-Admin-Token": admin_token} if admin_token else {}
+    r = c.delete(f"{api_url}/v1/auth/keys/{key_id}", headers=headers)
+    _handle_response(r)
+    return r.status_code in {200, 204}
+
+
+def signup_user(
+    api_url: str,
+    user_id: str,
+    name: str | None = None,
+    client: httpx.Client | None = None,
+) -> dict[str, Any]:
+    c = _get_client(client, timeout=10.0)
+    r = c.post(
+        f"{api_url}/v1/auth/signup",
+        json={"user_id": user_id, "name": name or "default"},
+    )
+    _handle_response(r)
+    return r.json()
+
+
+def export_user_data(
+    api_url: str,
+    user_id: str,
+    api_key: str | None = None,
+    client: httpx.Client | None = None,
+) -> dict[str, Any]:
+    c = _get_client(client, timeout=20.0, api_key=api_key)
+    r = c.get(f"{api_url}/v1/users/me/export", params={"user_id": user_id})
+    _handle_response(r)
+    return r.json()
+
+
+def delete_all_user_memories(
+    api_url: str,
+    user_id: str,
+    api_key: str | None = None,
+    client: httpx.Client | None = None,
+) -> dict[str, Any]:
+    c = _get_client(client, timeout=20.0, api_key=api_key)
+    r = c.delete(f"{api_url}/v1/users/me/memories", params={"user_id": user_id})
+    _handle_response(r)
+    return r.json()

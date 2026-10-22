@@ -12,6 +12,22 @@ depends_on = None
 
 
 def upgrade():
+    conn = op.get_bind()
+    has_vector = conn.execute(
+        sa.text("SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'vector')")
+    ).scalar()
+
+    if not has_vector:
+        try:
+            with conn.begin_nested():
+                conn.execute(sa.text("CREATE EXTENSION IF NOT EXISTS vector"))
+        except Exception as exc:
+            raise RuntimeError(
+                "Failed to create 'vector' extension due to insufficient permissions. "
+                "Please enable the pgvector extension in your cloud database provider dashboard "
+                "(e.g., Neon or Supabase) before running migrations."
+            ) from exc
+
     op.create_table(
         "memories",
         sa.Column("id", sa.Uuid(), nullable=False),

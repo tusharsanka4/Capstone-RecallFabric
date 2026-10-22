@@ -1,0 +1,22 @@
+{
+  "$schema": "https://modelcontextprotocol.io/schema/mcp-config.json",
+  "mcpServers": {
+    "recallfabric-remote": {
+      "url": "https://api.recallfabric.example.com/mcp",
+      "transport": "streamable-http",
+      "headers": {
+        "Authorization": "Bearer YOUR_RECALLFABRIC_API_KEY"
+      }
+    },
+    "recallfabric-stdio-bridge": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-remote",
+        "https://api.recallfabric.example.com/mcp",
+        "--header",
+        "Authorization: Bearer YOUR_RECALLFABRIC_API_KEY"
+      ]
+    }
+  }
+}

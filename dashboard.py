@@ -1,6 +1,7 @@
 """RecallFabric - Claude-inspired dark mode chatbot with live memory sidebar."""
 
 import html
+import json
 import os
 
 import streamlit as st
@@ -10,17 +11,23 @@ from recallfabric.dashboard_client import (
     chat_with_service,
     check_status,
     clear_all_memories,
+    create_api_key,
     create_memory,
+    delete_all_user_memories,
     delete_memory,
     disable_memory,
     enable_memory,
+    export_user_data,
     fetch_memories,
     get_memory,
     get_memory_history,
     get_memory_provenance,
+    list_api_keys,
     preview_extraction,
     retrieve_memories,
+    revoke_api_key,
     search_memories,
+    signup_user,
     update_memory,
 )
 
@@ -623,7 +630,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-tab_chat, tab_memories = st.tabs(["💬 Chat", "🧠 Memories"])
+tab_chat, tab_memories, tab_keys = st.tabs(["💬 Chat", "🧠 Memories", "🔑 API Keys & Account"])
 
 with tab_chat:
     for msg in st.session_state.messages:
@@ -1016,3 +1023,137 @@ with tab_memories:
                     st.error(f"Extraction preview failed: {exc.detail}")
         else:
             st.warning("Please enter some text to preview extraction.")
+
+with tab_keys:
+    st.subheader("🔑 API Key Management & User Onboarding")
+    st.caption("Generate scoped API keys, inspect usage, or manage user data export and deletion.")
+
+    c_acc1, c_acc2 = st.columns(2)
+    with c_acc1:
+        st.markdown("#### Issue New API Key")
+        with st.form("signup_key_form"):
+            new_uid = st.text_input("User ID", value=USER_ID)
+            key_name = st.text_input("Key Description / Name", value="development-key")
+            admin_tok = st.text_input(
+                "Admin Token (optional)",
+                type="password",
+                help="Required if self-serve signup is disabled",
+            )
+            submit_key = st.form_submit_button("Generate API Key")
+            if submit_key:
+                if not new_uid.strip():
+                    st.error("User ID is required.")
+                else:
+                    try:
+                        if admin_tok.strip():
+                            res = create_api_key(
+                                API_URL,
+                                new_uid.strip(),
+                                name=key_name.strip() or "default",
+                                admin_token=admin_tok.strip(),
+                            )
+                            st.success(f"Key created successfully for {new_uid}!")
+                            st.code(res.get("key"), language="text")
+                            st.warning("Save this key now. It cannot be shown again.")
+                        else:
+                            res = signup_user(
+                                API_URL,
+                                new_uid.strip(),
+                                name=key_name.strip() or "default",
+                            )
+                            st.success(f"User onboarded! Key generated for {new_uid}:")
+                            st.code(res.get("api_key"), language="text")
+                            st.warning("Save this key now. It cannot be shown again.")
+                    except DashboardClientError as exc:
+                        st.error(f"Failed to issue key: {exc.detail}")
+
+    with c_acc2:
+        st.markdown("#### User Memory & Usage Summary")
+        user_mems = st.session_state.memories
+        total_mems = len(user_mems)
+        active_count = sum(1 for m in user_mems if m.get("status") == "active")
+        types_breakdown: dict[str, int] = {}
+        for m in user_mems:
+            t = m.get("type", "fact")
+            types_breakdown[t] = types_breakdown.get(t, 0) + 1
+
+        st.metric("Total Memories", total_mems)
+        col_st1, col_st2 = st.columns(2)
+        with col_st1:
+            st.metric("Active", active_count)
+        with col_st2:
+            st.metric("Disabled", total_mems - active_count)
+
+        if types_breakdown:
+            st.markdown("**Types Breakdown:**")
+            for t_name, t_cnt in sorted(types_breakdown.items()):
+                st.markdown(f"- `{t_name}`: {t_cnt}")
+
+    st.markdown("---")
+    st.markdown("#### Manage Existing API Keys")
+    admin_auth = st.text_input(
+        "Enter Admin Token to inspect or revoke keys",
+        type="password",
+        key="admin_list_tok",
+    )
+    if st.button("List Keys"):
+        if not admin_auth.strip():
+            st.warning("Admin Token is required to list existing keys.")
+        else:
+            try:
+                keys = list_api_keys(API_URL, admin_token=admin_auth.strip(), user_id=USER_ID)
+                if not keys:
+                    st.info(f"No active API keys found for user '{USER_ID}'.")
+                else:
+                    for k in keys:
+                        c_k1, c_k2, c_k3 = st.columns([3, 2, 1])
+                        with c_k1:
+                            st.markdown(f"**{k.get('name')}** (`{k.get('id')[:8]}...`)")
+                            st.caption(f"Created: {str(k.get('created_at', ''))[:19]}")
+                        with c_k2:
+                            st.markdown(
+                                f"Status: {'Active' if not k.get('revoked_at') else 'Revoked'}"
+                            )
+                        with c_k3:
+                            if not k.get("revoked_at"):
+                                if st.button("Revoke", key=f"rev_{k.get('id')}"):
+                                    revoke_api_key(
+                                        API_URL, k.get("id"), admin_token=admin_auth.strip()
+                                    )
+                                    st.success("Key revoked.")
+                                    st.rerun()
+            except DashboardClientError as exc:
+                st.error(f"Failed to list keys: {exc.detail}")
+
+    st.markdown("---")
+    st.markdown("#### Data Portability & GDPR Controls")
+    c_p1, c_p2 = st.columns(2)
+    with c_p1:
+        st.markdown("**Export All Memories & Events (JSON)**")
+        st.caption("Download a complete machine-readable archive of all memories and provenance.")
+        if st.button("Fetch Export Archive"):
+            try:
+                export_data = export_user_data(API_URL, USER_ID, API_KEY)
+                export_json = json.dumps(export_data, indent=2)
+                st.download_button(
+                    label="⬇️ Download Export JSON",
+                    data=export_json,
+                    file_name=f"recallfabric_{USER_ID}_export.json",
+                    mime="application/json",
+                )
+            except DashboardClientError as exc:
+                st.error(f"Export failed: {exc.detail}")
+
+    with c_p2:
+        st.markdown("**Purge All Memories (Right to be Forgotten)**")
+        st.caption("Permanently delete all memories, embeddings, and provenance records.")
+        confirm_purge = st.checkbox("I confirm permanent deletion of all my memories")
+        if st.button("🗑️ Delete All My Memories", disabled=not confirm_purge):
+            try:
+                res = delete_all_user_memories(API_URL, USER_ID, API_KEY)
+                st.success(f"Purged {res.get('deleted_memories', 0)} memories successfully.")
+                st.session_state.memories = []
+                st.session_state.messages = []
+                st.rerun()
+            except DashboardClientError as exc:
+                st.error(f"Purge failed: {exc.detail}")

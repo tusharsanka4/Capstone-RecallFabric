@@ -6,7 +6,7 @@ from recallfabric.schemas.provider import ProviderInfo, ProvidersResponse
 router = APIRouter(prefix="/providers", tags=["providers"])
 
 
-@router.get("", response_model=ProvidersResponse)
+@router.get("", response_model=ProvidersResponse, operation_id="get_providers")
 def list_providers(request: Request):
     settings = request.app.state.settings
     names = ["ollama", "openai", "anthropic", "gemini"]

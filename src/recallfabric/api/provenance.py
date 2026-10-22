@@ -23,7 +23,7 @@ Owner = Annotated[str, Query(min_length=1, max_length=255, pattern=r"\S")]
 ApiKeyDep = Annotated[ApiKey | None, Depends(get_current_api_key)]
 
 
-@router.get("", response_model=ProvenanceFeedPage)
+@router.get("", response_model=ProvenanceFeedPage, operation_id="provenance_feed")
 def list_provenance_feed(
     user_id: Owner,
     session: Database,
@@ -75,7 +75,11 @@ def list_provenance_feed(
         )
 
 
-@router.get("/{memory_id}", response_model=MemoryProvenanceResponse)
+@router.get(
+    "/{memory_id}",
+    response_model=MemoryProvenanceResponse,
+    operation_id="memory_provenance",
+)
 def get_memory_provenance_route(
     memory_id: UUID,
     user_id: Owner,

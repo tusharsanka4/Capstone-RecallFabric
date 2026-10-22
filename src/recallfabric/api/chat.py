@@ -39,7 +39,7 @@ LLMClient = Annotated[Any, Depends(get_llm_client)]
 ApiKeyDep = Annotated[ApiKey | None, Depends(get_current_api_key)]
 
 
-@router.post("", response_model=ChatResponse)
+@router.post("", response_model=ChatResponse, operation_id="chat")
 def chat_endpoint(
     payload: ChatRequest,
     session: Database,

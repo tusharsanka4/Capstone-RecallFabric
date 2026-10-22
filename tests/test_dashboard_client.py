@@ -9,18 +9,24 @@ from recallfabric.dashboard_client import (
     chat_with_service,
     check_status,
     clear_all_memories,
+    create_api_key,
     create_memory,
+    delete_all_user_memories,
     delete_memory,
     disable_memory,
     enable_memory,
+    export_user_data,
     extract_memories,
     fetch_memories,
     get_memory,
     get_memory_history,
     get_memory_provenance,
+    list_api_keys,
     preview_extraction,
     retrieve_memories,
+    revoke_api_key,
     search_memories,
+    signup_user,
     update_memory,
 )
 
@@ -197,3 +203,52 @@ def test_dashboard_client_503():
     with pytest.raises(DashboardClientError) as exc_info:
         chat_with_service("http://test", "alice", "hello", [], client=client)
     assert exc_info.value.status_code == 503
+
+
+def test_dashboard_client_keys_and_account():
+    def handler(request: httpx.Request) -> httpx.Response:
+        url = str(request.url)
+        if request.method == "POST" and url.endswith("/auth/signup"):
+            return httpx.Response(201, json={"user_id": "bob", "api_key": "rf_123", "name": "def"})
+        if request.method == "POST" and url.endswith("/auth/keys"):
+            return httpx.Response(
+                201,
+                json={"id": "key-1", "user_id": "bob", "key": "rf_admin_created"},
+            )
+        if request.method == "GET" and url.endswith("/auth/keys?user_id=bob"):
+            return httpx.Response(200, json=[{"id": "key-1", "name": "def", "revoked_at": None}])
+        if request.method == "DELETE" and "/auth/keys/key-1" in url:
+            return httpx.Response(204)
+        if request.method == "GET" and "/users/me/export" in url:
+            return httpx.Response(200, json={"user_id": "bob", "memories": [], "events": []})
+        if request.method == "DELETE" and "/users/me/memories" in url:
+            return httpx.Response(200, json={"deleted_memories": 5, "user_id": "bob"})
+        return httpx.Response(404)
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+
+    # Signup
+    signup_res = signup_user("http://test", "bob", "def", client=client)
+    assert signup_res["api_key"] == "rf_123"
+
+    # Create Key with admin token
+    create_res = create_api_key(
+        "http://test", "bob", "admin_key", admin_token="adm123", client=client
+    )
+    assert create_res["key"] == "rf_admin_created"
+
+    # List Keys
+    keys = list_api_keys("http://test", admin_token="adm123", user_id="bob", client=client)
+    assert len(keys) == 1
+    assert keys[0]["id"] == "key-1"
+
+    # Revoke Key
+    assert revoke_api_key("http://test", "key-1", admin_token="adm123", client=client) is True
+
+    # Export
+    exp = export_user_data("http://test", "bob", api_key="rf_123", client=client)
+    assert exp["user_id"] == "bob"
+
+    # Delete
+    del_res = delete_all_user_memories("http://test", "bob", api_key="rf_123", client=client)
+    assert del_res["deleted_memories"] == 5

@@ -1,0 +1,4229 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "RecallFabric",
+    "description": "Persistent, structured, portable memory for AI applications.",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/v1/capabilities": {
+      "get": {
+        "tags": [
+          "tools"
+        ],
+        "summary": "Get service capabilities and active models",
+        "description": "Inspect service version, active embedding model details, supported memory categories, enabled security features, and operational limits.",
+        "operationId": "capabilities",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CapabilitiesResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/remember": {
+      "post": {
+        "tags": [
+          "tools"
+        ],
+        "summary": "Store a memory or extract facts from conversation",
+        "description": "Store an explicit memory statement or extract atomic facts from conversation text. Use `content` for direct storage (preferences, facts, goals, etc.) with automatic deduplication and conflict superseding. Set `extract=true` to automatically analyze conversation turns and extract isolated facts.",
+        "operationId": "remember",
+        "parameters": [
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Idempotency-Key"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RememberRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RememberResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/recall": {
+      "post": {
+        "tags": [
+          "tools"
+        ],
+        "summary": "Recall relevant memories for a query",
+        "description": "Retrieve relevant user memories for a query, ranked by multi-factor relevance (semantic similarity, importance, recency, and access frequency). Returns a structured list of memories and a pre-formatted, character-budgeted `context` markdown string ready for system prompt injection.",
+        "operationId": "recall",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecallRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecallResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/forget": {
+      "post": {
+        "tags": [
+          "tools"
+        ],
+        "summary": "Delete a memory by ID or search query with confirmation",
+        "description": "Delete a user memory either by its exact UUID (`memory_id`), or by semantically finding the best match for a `query`. When searching by query without `confirm=true`, the endpoint returns the candidate memory awaiting confirmation. Pass `confirm=true` to confirm permanent deletion.",
+        "operationId": "forget",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ForgetRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForgetResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/profile": {
+      "get": {
+        "tags": [
+          "tools"
+        ],
+        "summary": "Get compact user profile summary and top active memories",
+        "description": "Retrieve a compact summary of the user's active memories organized by category (preferences, profile, goals, skills, facts). Returns a pre-assembled markdown profile ready for context injection.",
+        "operationId": "profile",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Target user identifier",
+              "title": "User Id"
+            },
+            "description": "Target user identifier"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "description": "Max memories to include in summary",
+              "default": 20,
+              "title": "Limit"
+            },
+            "description": "Max memories to include in summary"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProfileResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/memories": {
+      "post": {
+        "tags": [
+          "memories"
+        ],
+        "summary": "Create Memory",
+        "operationId": "create_memory",
+        "parameters": [
+          {
+            "name": "deduplicate",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Deduplicate"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MemoryCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "memories"
+        ],
+        "summary": "List Memories",
+        "operationId": "list_memories",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255,
+              "pattern": "\\S",
+              "title": "User Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "preference",
+                    "goal",
+                    "skill",
+                    "profile",
+                    "fact",
+                    "other"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Type"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "active",
+                    "disabled"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryPage"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/memories/search": {
+      "post": {
+        "tags": [
+          "memories"
+        ],
+        "summary": "Search Memories",
+        "operationId": "search_memories",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MemorySearch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryPage"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/memories/retrieve": {
+      "post": {
+        "tags": [
+          "memories"
+        ],
+        "summary": "Retrieve Memories",
+        "operationId": "retrieve_memories",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MemoryRetrieve"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryRankedPage"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/memories/{memory_id}": {
+      "get": {
+        "tags": [
+          "memories"
+        ],
+        "summary": "Get Memory",
+        "operationId": "get_memory",
+        "parameters": [
+          {
+            "name": "memory_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Memory Id"
+            }
+          },
+          {
+            "name": "user_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255,
+              "pattern": "\\S",
+              "title": "User Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "memories"
+        ],
+        "summary": "Update Memory",
+        "operationId": "update_memory",
+        "parameters": [
+          {
+            "name": "memory_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Memory Id"
+            }
+          },
+          {
+            "name": "user_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255,
+              "pattern": "\\S",
+              "title": "User Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MemoryUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "memories"
+        ],
+        "summary": "Delete Memory",
+        "operationId": "delete_memory",
+        "parameters": [
+          {
+            "name": "memory_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Memory Id"
+            }
+          },
+          {
+            "name": "user_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255,
+              "pattern": "\\S",
+              "title": "User Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/memories/{memory_id}/versions": {
+      "get": {
+        "tags": [
+          "memories"
+        ],
+        "summary": "Memory History",
+        "operationId": "memory_history",
+        "parameters": [
+          {
+            "name": "memory_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Memory Id"
+            }
+          },
+          {
+            "name": "user_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255,
+              "pattern": "\\S",
+              "title": "User Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryPage"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/memories/{memory_id}/provenance": {
+      "get": {
+        "tags": [
+          "memories"
+        ],
+        "summary": "Get Memory Provenance",
+        "operationId": "memory_provenance_detail",
+        "parameters": [
+          {
+            "name": "memory_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Memory Id"
+            }
+          },
+          {
+            "name": "user_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255,
+              "pattern": "\\S",
+              "title": "User Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryProvenanceResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/memories/{memory_id}/disable": {
+      "post": {
+        "tags": [
+          "memories"
+        ],
+        "summary": "Disable Memory Endpoint",
+        "operationId": "disable_memory",
+        "parameters": [
+          {
+            "name": "memory_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Memory Id"
+            }
+          },
+          {
+            "name": "user_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255,
+              "pattern": "\\S",
+              "title": "User Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/memories/{memory_id}/enable": {
+      "post": {
+        "tags": [
+          "memories"
+        ],
+        "summary": "Enable Memory Endpoint",
+        "operationId": "enable_memory",
+        "parameters": [
+          {
+            "name": "memory_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Memory Id"
+            }
+          },
+          {
+            "name": "user_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255,
+              "pattern": "\\S",
+              "title": "User Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryRead"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/extraction": {
+      "post": {
+        "tags": [
+          "extraction"
+        ],
+        "summary": "Extract Memories",
+        "operationId": "extract_memories",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MemoryExtractRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExtractionResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/chat": {
+      "post": {
+        "tags": [
+          "chat"
+        ],
+        "summary": "Chat Endpoint",
+        "operationId": "chat",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/embeddings": {
+      "post": {
+        "tags": [
+          "embeddings"
+        ],
+        "summary": "Generate Embedding",
+        "operationId": "generate_embedding",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmbeddingRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EmbeddingResult"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/auth/keys": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Create Api Key",
+        "operationId": "create_api_key",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateApiKeyRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ApiKeyCreatedResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "List Api Keys",
+        "operationId": "list_api_keys",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "User Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ApiKeyInfoResponse"
+                  },
+                  "title": "Response List Api Keys"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/auth/signup": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Self-serve onboarding for new users",
+        "description": "Registers a user and issues an active API key when public signup is enabled.",
+        "operationId": "signup_user",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SignupRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SignupResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/auth/keys/{key_id}": {
+      "delete": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Revoke Api Key",
+        "operationId": "revoke_api_key",
+        "parameters": [
+          {
+            "name": "key_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Key Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/users/me/memories": {
+      "delete": {
+        "tags": [
+          "users"
+        ],
+        "summary": "Delete All User Memories",
+        "operationId": "delete_user_memories",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "User Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Delete User Memories"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/users/me/export": {
+      "get": {
+        "tags": [
+          "users"
+        ],
+        "summary": "Export User Data",
+        "operationId": "export_user_data",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "User Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Export User Data"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/provenance": {
+      "get": {
+        "tags": [
+          "provenance"
+        ],
+        "summary": "List Provenance Feed",
+        "operationId": "provenance_feed",
+        "parameters": [
+          {
+            "name": "user_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255,
+              "pattern": "\\S",
+              "title": "User Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Limit"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          },
+          {
+            "name": "event_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Event Type"
+            }
+          },
+          {
+            "name": "memory_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Memory Id"
+            }
+          },
+          {
+            "name": "order",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "type": "string",
+              "default": "asc",
+              "title": "Order"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProvenanceFeedPage"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/provenance/{memory_id}": {
+      "get": {
+        "tags": [
+          "provenance"
+        ],
+        "summary": "Get Memory Provenance Route",
+        "operationId": "memory_provenance",
+        "parameters": [
+          {
+            "name": "memory_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Memory Id"
+            }
+          },
+          {
+            "name": "user_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 255,
+              "pattern": "\\S",
+              "title": "User Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MemoryProvenanceResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/providers": {
+      "get": {
+        "tags": [
+          "providers"
+        ],
+        "summary": "List Providers",
+        "operationId": "get_providers",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProvidersResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/proxy/chat/completions": {
+      "post": {
+        "tags": [
+          "proxy"
+        ],
+        "summary": "OpenAI-compatible memory proxy",
+        "description": "Accepts standard chat completion requests, retrieves relevant user memories, injects them into the system message, and forwards the request to upstream LLM providers. Streams responses back unchanged and optionally extracts new facts asynchronously.",
+        "operationId": "proxy_chat_completions_v1_proxy_chat_completions_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/ingest": {
+      "post": {
+        "tags": [
+          "ingest"
+        ],
+        "summary": "Ingest conversation transcript for asynchronous memory extraction",
+        "description": "Accepts a full conversation transcript (list of messages) from external apps and triggers asynchronous batch fact extraction and memory consolidation. Returns a job ID and a status URL to poll for results.",
+        "operationId": "ingest_transcript_v1_ingest_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IngestRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IngestJobResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/ingest/jobs/{job_id}": {
+      "get": {
+        "tags": [
+          "ingest"
+        ],
+        "summary": "Get transcript ingestion job status",
+        "description": "Check the current processing status, extracted memory count, and results for a job.",
+        "operationId": "get_ingest_job_status_v1_ingest_jobs__job_id__get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IngestJobStatus"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "summary": "Health",
+        "operationId": "health",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ready": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "summary": "Readiness",
+        "operationId": "readiness",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ReadinessResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/HealthResponse"
+                    }
+                  ],
+                  "title": "Response Readiness"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Not ready"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ApiKeyCreatedResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "user_id": {
+            "type": "string",
+            "title": "User Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "key": {
+            "type": "string",
+            "title": "Key"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "user_id",
+          "name",
+          "key",
+          "created_at"
+        ],
+        "title": "ApiKeyCreatedResponse"
+      },
+      "ApiKeyInfoResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "user_id": {
+            "type": "string",
+            "title": "User Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "last_used_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Used At"
+          },
+          "revoked_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revoked At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "user_id",
+          "name",
+          "created_at"
+        ],
+        "title": "ApiKeyInfoResponse"
+      },
+      "CapabilitiesResponse": {
+        "properties": {
+          "service_version": {
+            "type": "string",
+            "title": "Service Version",
+            "description": "Semantic version of the RecallFabric service",
+            "examples": [
+              "0.1.0"
+            ]
+          },
+          "supported_memory_types": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Supported Memory Types",
+            "description": "Supported memory classification categories",
+            "examples": [
+              [
+                "preference",
+                "goal",
+                "skill",
+                "profile",
+                "fact",
+                "other"
+              ]
+            ]
+          },
+          "embedding_model": {
+            "type": "string",
+            "title": "Embedding Model",
+            "description": "Active embedding model identifier used for semantic search and ranking",
+            "examples": [
+              "BAAI/bge-small-en-v1.5"
+            ]
+          },
+          "embedding_dimensions": {
+            "type": "integer",
+            "title": "Embedding Dimensions",
+            "description": "Vector dimensionality of the active embedding model",
+            "examples": [
+              384
+            ]
+          },
+          "enabled_features": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "type": "object",
+            "title": "Enabled Features",
+            "description": "Status of operational features and security capabilities",
+            "examples": [
+              {
+                "auth": true,
+                "conflict_resolution": true,
+                "deduplication": true,
+                "encryption": false,
+                "hybrid_ranking": true,
+                "provenance": true,
+                "rate_limiting": true
+              }
+            ]
+          },
+          "limits": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Limits",
+            "description": "Operational limits, rate limiting thresholds, and context character budgets",
+            "examples": [
+              {
+                "context_max_chars": 2000,
+                "max_request_size_bytes": 1048576,
+                "rate_limit_burst": 40,
+                "rate_limit_rps": 20.0
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "service_version",
+          "supported_memory_types",
+          "embedding_model",
+          "embedding_dimensions",
+          "enabled_features",
+          "limits"
+        ],
+        "title": "CapabilitiesResponse",
+        "description": "Service capabilities, supported categories, active model, and operational limits.",
+        "examples": [
+          {
+            "embedding_dimensions": 384,
+            "embedding_model": "BAAI/bge-small-en-v1.5",
+            "enabled_features": {
+              "auth": true,
+              "conflict_resolution": true,
+              "deduplication": true,
+              "encryption": false,
+              "hybrid_ranking": true,
+              "provenance": true,
+              "rate_limiting": true
+            },
+            "limits": {
+              "context_max_chars": 2000,
+              "max_request_size_bytes": 1048576,
+              "rate_limit_burst": 40,
+              "rate_limit_rps": 20.0
+            },
+            "service_version": "0.1.0",
+            "supported_memory_types": [
+              "preference",
+              "goal",
+              "skill",
+              "profile",
+              "fact",
+              "other"
+            ]
+          }
+        ]
+      },
+      "ChatMessage": {
+        "properties": {
+          "role": {
+            "type": "string",
+            "enum": [
+              "user",
+              "assistant",
+              "system"
+            ],
+            "title": "Role"
+          },
+          "content": {
+            "type": "string",
+            "title": "Content"
+          }
+        },
+        "type": "object",
+        "required": [
+          "role",
+          "content"
+        ],
+        "title": "ChatMessage"
+      },
+      "ChatRequest": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "User Id"
+          },
+          "message": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Message"
+          },
+          "history": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ChatMessage"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "History"
+          },
+          "conversation_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Id"
+          },
+          "extract": {
+            "type": "boolean",
+            "title": "Extract",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "user_id",
+          "message"
+        ],
+        "title": "ChatRequest"
+      },
+      "ChatResponse": {
+        "properties": {
+          "reply": {
+            "type": "string",
+            "title": "Reply"
+          },
+          "memories_used": {
+            "items": {
+              "$ref": "#/components/schemas/MemoryRanked"
+            },
+            "type": "array",
+            "title": "Memories Used"
+          },
+          "model": {
+            "type": "string",
+            "title": "Model"
+          },
+          "extracted": {
+            "items": {
+              "$ref": "#/components/schemas/MemoryRead"
+            },
+            "type": "array",
+            "title": "Extracted"
+          },
+          "extracted_memories": {
+            "items": {
+              "$ref": "#/components/schemas/MemoryRead"
+            },
+            "type": "array",
+            "title": "Extracted Memories"
+          }
+        },
+        "type": "object",
+        "required": [
+          "reply",
+          "model"
+        ],
+        "title": "ChatResponse"
+      },
+      "CreateApiKeyRequest": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "User Id"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id",
+          "name"
+        ],
+        "title": "CreateApiKeyRequest"
+      },
+      "EmbeddingRequest": {
+        "properties": {
+          "text": {
+            "type": "string",
+            "maxLength": 20000,
+            "minLength": 1,
+            "title": "Text"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "passage",
+              "query"
+            ],
+            "title": "Kind",
+            "default": "query"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "text"
+        ],
+        "title": "EmbeddingRequest"
+      },
+      "EmbeddingResult": {
+        "properties": {
+          "model": {
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Model"
+          },
+          "dimensions": {
+            "type": "integer",
+            "maximum": 16000.0,
+            "minimum": 1.0,
+            "title": "Dimensions"
+          },
+          "vector": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array",
+            "title": "Vector"
+          }
+        },
+        "type": "object",
+        "required": [
+          "model",
+          "dimensions",
+          "vector"
+        ],
+        "title": "EmbeddingResult"
+      },
+      "ExtractionResponse": {
+        "properties": {
+          "extracted": {
+            "items": {
+              "$ref": "#/components/schemas/MemoryRead"
+            },
+            "type": "array",
+            "title": "Extracted"
+          },
+          "candidates": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Candidates"
+          },
+          "rejected": {
+            "items": {
+              "$ref": "#/components/schemas/RejectedCandidate"
+            },
+            "type": "array",
+            "title": "Rejected"
+          }
+        },
+        "type": "object",
+        "title": "ExtractionResponse"
+      },
+      "ForgetRequest": {
+        "properties": {
+          "memory_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Memory Id",
+            "description": "Exact UUID of the memory to forget/delete.",
+            "examples": [
+              "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d"
+            ]
+          },
+          "query": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Query",
+            "description": "Semantic search query to find the memory to delete if memory_id is unknown.",
+            "examples": [
+              "User dislikes spicy food"
+            ]
+          },
+          "confirm": {
+            "type": "boolean",
+            "title": "Confirm",
+            "description": "Confirmation flag. When false and using query, returns candidate memory without deleting. When true, permanently deletes it.",
+            "default": false,
+            "examples": [
+              false
+            ]
+          },
+          "user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Id",
+            "description": "Target user identifier (optional; automatically derived from authenticated API key when auth is enabled).",
+            "examples": [
+              "user_123"
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ForgetRequest",
+        "description": "Delete a memory by ID or search for it semantically with confirmation.",
+        "examples": [
+          {
+            "confirm": false,
+            "query": "User dislikes spicy food"
+          },
+          {
+            "confirm": true,
+            "memory_id": "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d"
+          }
+        ]
+      },
+      "ForgetResponse": {
+        "properties": {
+          "confirmed": {
+            "type": "boolean",
+            "title": "Confirmed",
+            "description": "True if memory was permanently deleted; False if confirmation is required or memory not found.",
+            "examples": [
+              true
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "deleted",
+              "pending_confirmation",
+              "not_found"
+            ],
+            "title": "Status",
+            "description": "Status of the forget request.",
+            "examples": [
+              "deleted"
+            ]
+          },
+          "deleted_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deleted Id",
+            "description": "ID of the deleted memory if deletion occurred.",
+            "examples": [
+              "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d"
+            ]
+          },
+          "candidate": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MemoryRead"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Candidate memory found by semantic search awaiting confirmation when confirm=false."
+          },
+          "deleted_memory": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MemoryRead"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The memory record that was deleted."
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "description": "Human and LLM-readable message explaining the result or prompting for confirmation.",
+            "examples": [
+              "Memory deleted successfully."
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "confirmed",
+          "status",
+          "message"
+        ],
+        "title": "ForgetResponse",
+        "description": "Result of the forget tool operation.",
+        "examples": [
+          {
+            "confirmed": true,
+            "deleted_id": "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d",
+            "message": "Memory 9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d deleted successfully.",
+            "status": "deleted"
+          }
+        ]
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "HealthResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "default": "ok"
+          }
+        },
+        "type": "object",
+        "title": "HealthResponse"
+      },
+      "IngestJobResponse": {
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "title": "Job Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "default": "pending"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "status_url": {
+            "type": "string",
+            "title": "Status Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "job_id",
+          "message",
+          "status_url"
+        ],
+        "title": "IngestJobResponse"
+      },
+      "IngestJobStatus": {
+        "properties": {
+          "job_id": {
+            "type": "string",
+            "title": "Job Id"
+          },
+          "user_id": {
+            "type": "string",
+            "title": "User Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "description": "'pending', 'processing', 'completed', or 'failed'"
+          },
+          "message_count": {
+            "type": "integer",
+            "title": "Message Count"
+          },
+          "extracted_count": {
+            "type": "integer",
+            "title": "Extracted Count",
+            "default": 0
+          },
+          "memories": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Memories"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "created_at": {
+            "type": "string",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "job_id",
+          "user_id",
+          "status",
+          "message_count",
+          "created_at"
+        ],
+        "title": "IngestJobStatus"
+      },
+      "IngestMessage": {
+        "properties": {
+          "role": {
+            "type": "string",
+            "title": "Role"
+          },
+          "content": {
+            "type": "string",
+            "title": "Content"
+          }
+        },
+        "type": "object",
+        "required": [
+          "role",
+          "content"
+        ],
+        "title": "IngestMessage"
+      },
+      "IngestRequest": {
+        "properties": {
+          "user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Id"
+          },
+          "transcript": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/IngestMessage"
+                },
+                "type": "array"
+              },
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              }
+            ],
+            "minLength": 1,
+            "title": "Transcript",
+            "description": "List of conversation turns to extract memories from"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source",
+            "description": "Source identifier",
+            "default": "webhook_ingest"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Metadata"
+          }
+        },
+        "type": "object",
+        "required": [
+          "transcript"
+        ],
+        "title": "IngestRequest"
+      },
+      "JsonValue": {},
+      "MemoryCreate": {
+        "properties": {
+          "content": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Content"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "preference",
+              "goal",
+              "skill",
+              "profile",
+              "fact",
+              "other"
+            ],
+            "title": "Type"
+          },
+          "importance": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Importance",
+            "default": 0.5
+          },
+          "confidence": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "default": 1.0
+          },
+          "source": {
+            "type": "string",
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Source"
+          },
+          "creation_reason": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Creation Reason"
+          },
+          "metadata": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "type": "object",
+            "title": "Metadata"
+          },
+          "user_id": {
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "User Id"
+          },
+          "deduplicate": {
+            "type": "boolean",
+            "title": "Deduplicate",
+            "default": false
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "content",
+          "type",
+          "source",
+          "user_id"
+        ],
+        "title": "MemoryCreate"
+      },
+      "MemoryEventRead": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "memory_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Memory Id"
+          },
+          "memory_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Memory Version"
+          },
+          "user_id": {
+            "type": "string",
+            "title": "User Id"
+          },
+          "event_type": {
+            "type": "string",
+            "title": "Event Type"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "creation_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Creation Reason"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "actor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor"
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          },
+          "detail": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "type": "object",
+            "title": "Detail"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "memory_id",
+          "user_id",
+          "event_type",
+          "created_at"
+        ],
+        "title": "MemoryEventRead"
+      },
+      "MemoryExtractRequest": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "User Id"
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Text"
+          },
+          "source": {
+            "type": "string",
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Source"
+          },
+          "dry_run": {
+            "type": "boolean",
+            "title": "Dry Run",
+            "default": false
+          },
+          "deduplicate": {
+            "type": "boolean",
+            "title": "Deduplicate",
+            "default": true
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "user_id",
+          "text",
+          "source"
+        ],
+        "title": "MemoryExtractRequest"
+      },
+      "MemoryPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MemoryRead"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          },
+          "has_more": {
+            "type": "boolean",
+            "title": "Has More"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "limit",
+          "offset",
+          "has_more"
+        ],
+        "title": "MemoryPage"
+      },
+      "MemoryProvenanceResponse": {
+        "properties": {
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/MemoryEventRead"
+            },
+            "type": "array",
+            "title": "Events"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MemoryEventRead"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "events",
+          "items"
+        ],
+        "title": "MemoryProvenanceResponse"
+      },
+      "MemoryRanked": {
+        "properties": {
+          "content": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Content"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "preference",
+              "goal",
+              "skill",
+              "profile",
+              "fact",
+              "other"
+            ],
+            "title": "Type"
+          },
+          "importance": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Importance",
+            "default": 0.5
+          },
+          "confidence": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "default": 1.0
+          },
+          "source": {
+            "type": "string",
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Source"
+          },
+          "creation_reason": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Creation Reason"
+          },
+          "metadata": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "type": "object",
+            "title": "Metadata"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "user_id": {
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "User Id"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Version"
+          },
+          "previous_version": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Version"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "disabled",
+              "superseded"
+            ],
+            "title": "Status"
+          },
+          "embedding_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Embedding Model"
+          },
+          "embedding_dimensions": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Embedding Dimensions"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          },
+          "last_accessed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Accessed At"
+          },
+          "access_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Access Count"
+          },
+          "action": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "created",
+                  "consolidated",
+                  "ignored"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action"
+          },
+          "matched_memory_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matched Memory Id"
+          },
+          "conflict_resolution": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conflict Resolution"
+          },
+          "score": {
+            "type": "number",
+            "title": "Score"
+          },
+          "score_breakdown": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ScoreBreakdown"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "content",
+          "type",
+          "source",
+          "id",
+          "user_id",
+          "version",
+          "status",
+          "created_at",
+          "updated_at",
+          "access_count",
+          "score"
+        ],
+        "title": "MemoryRanked"
+      },
+      "MemoryRankedPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MemoryRanked"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "has_more": {
+            "type": "boolean",
+            "title": "Has More"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "limit",
+          "has_more"
+        ],
+        "title": "MemoryRankedPage"
+      },
+      "MemoryRead": {
+        "properties": {
+          "content": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Content"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "preference",
+              "goal",
+              "skill",
+              "profile",
+              "fact",
+              "other"
+            ],
+            "title": "Type"
+          },
+          "importance": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Importance",
+            "default": 0.5
+          },
+          "confidence": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "default": 1.0
+          },
+          "source": {
+            "type": "string",
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Source"
+          },
+          "creation_reason": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Creation Reason"
+          },
+          "metadata": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "type": "object",
+            "title": "Metadata"
+          },
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "user_id": {
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "User Id"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Version"
+          },
+          "previous_version": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Version"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "disabled",
+              "superseded"
+            ],
+            "title": "Status"
+          },
+          "embedding_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Embedding Model"
+          },
+          "embedding_dimensions": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Embedding Dimensions"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          },
+          "last_accessed_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Accessed At"
+          },
+          "access_count": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Access Count"
+          },
+          "action": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "created",
+                  "consolidated",
+                  "ignored"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Action"
+          },
+          "matched_memory_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Matched Memory Id"
+          },
+          "conflict_resolution": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/JsonValue"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conflict Resolution"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "content",
+          "type",
+          "source",
+          "id",
+          "user_id",
+          "version",
+          "status",
+          "created_at",
+          "updated_at",
+          "access_count"
+        ],
+        "title": "MemoryRead"
+      },
+      "MemoryRetrieve": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "User Id"
+          },
+          "query": {
+            "type": "string",
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Query"
+          },
+          "type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "preference",
+                  "goal",
+                  "skill",
+                  "profile",
+                  "fact",
+                  "other"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Type"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "disabled"
+            ],
+            "title": "Status",
+            "default": "active"
+          },
+          "limit": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "default": 20
+          },
+          "min_score": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1.0,
+                "minimum": -1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Score"
+          },
+          "track_access": {
+            "type": "boolean",
+            "title": "Track Access",
+            "default": true
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "user_id",
+          "query"
+        ],
+        "title": "MemoryRetrieve"
+      },
+      "MemorySearch": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "User Id"
+          },
+          "query": {
+            "type": "string",
+            "maxLength": 1000,
+            "minLength": 1,
+            "title": "Query"
+          },
+          "type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "preference",
+                  "goal",
+                  "skill",
+                  "profile",
+                  "fact",
+                  "other"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Type"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "disabled"
+            ],
+            "title": "Status",
+            "default": "active"
+          },
+          "limit": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "default": 20
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Offset",
+            "default": 0
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "user_id",
+          "query"
+        ],
+        "title": "MemorySearch"
+      },
+      "MemoryUpdate": {
+        "properties": {
+          "content": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Content"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "preference",
+              "goal",
+              "skill",
+              "profile",
+              "fact",
+              "other"
+            ],
+            "title": "Type"
+          },
+          "importance": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Importance",
+            "default": 0.5
+          },
+          "confidence": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "default": 1.0
+          },
+          "source": {
+            "type": "string",
+            "maxLength": 512,
+            "minLength": 1,
+            "title": "Source"
+          },
+          "creation_reason": {
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Creation Reason"
+          },
+          "metadata": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/JsonValue"
+            },
+            "type": "object",
+            "title": "Metadata"
+          },
+          "expected_version": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Expected Version"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "active",
+              "disabled"
+            ],
+            "title": "Status",
+            "default": "active"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "content",
+          "type",
+          "source",
+          "expected_version"
+        ],
+        "title": "MemoryUpdate"
+      },
+      "ProfileResponse": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "User Id",
+            "description": "The user ID for this profile",
+            "examples": [
+              "user_123"
+            ]
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary",
+            "description": "Formatted markdown profile summary ready for LLM context injection",
+            "examples": [
+              "User Profile Summary:\n- [profile] Engineer\n- [preference] Python"
+            ]
+          },
+          "memory_count": {
+            "type": "integer",
+            "title": "Memory Count",
+            "description": "Total number of active memories included in the profile",
+            "examples": [
+              2
+            ]
+          },
+          "categories": {
+            "additionalProperties": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "type": "object",
+            "title": "Categories",
+            "description": "Active memory contents grouped by category",
+            "examples": [
+              {
+                "preference": [
+                  "Prefers Python"
+                ],
+                "profile": [
+                  "Senior Software Engineer"
+                ]
+              }
+            ]
+          },
+          "memories": {
+            "items": {
+              "$ref": "#/components/schemas/MemoryRead"
+            },
+            "type": "array",
+            "title": "Memories",
+            "description": "Top active memories ranked by importance and recency"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id",
+          "summary",
+          "memory_count",
+          "categories"
+        ],
+        "title": "ProfileResponse",
+        "description": "Compact summary of the most important active memories for the user.",
+        "examples": [
+          {
+            "categories": {
+              "preference": [
+                "Python"
+              ],
+              "profile": [
+                "Engineer"
+              ]
+            },
+            "memories": [],
+            "memory_count": 2,
+            "summary": "User Profile Summary:\n- [profile] Engineer\n- [preference] Python",
+            "user_id": "user_123"
+          }
+        ]
+      },
+      "ProvenanceFeedPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/MemoryEventRead"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/MemoryEventRead"
+            },
+            "type": "array",
+            "title": "Events"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit"
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset"
+          },
+          "has_more": {
+            "type": "boolean",
+            "title": "Has More"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "events",
+          "limit",
+          "offset",
+          "has_more"
+        ],
+        "title": "ProvenanceFeedPage"
+      },
+      "ProviderInfo": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "model": {
+            "type": "string",
+            "title": "Model"
+          },
+          "configured": {
+            "type": "boolean",
+            "title": "Configured"
+          },
+          "available": {
+            "type": "boolean",
+            "title": "Available"
+          },
+          "is_default": {
+            "type": "boolean",
+            "title": "Is Default"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "model",
+          "configured",
+          "available",
+          "is_default"
+        ],
+        "title": "ProviderInfo"
+      },
+      "ProvidersResponse": {
+        "properties": {
+          "providers": {
+            "items": {
+              "$ref": "#/components/schemas/ProviderInfo"
+            },
+            "type": "array",
+            "title": "Providers"
+          },
+          "default_provider": {
+            "type": "string",
+            "title": "Default Provider"
+          },
+          "chat_provider": {
+            "type": "string",
+            "title": "Chat Provider"
+          },
+          "extraction_provider": {
+            "type": "string",
+            "title": "Extraction Provider"
+          }
+        },
+        "type": "object",
+        "required": [
+          "providers",
+          "default_provider",
+          "chat_provider",
+          "extraction_provider"
+        ],
+        "title": "ProvidersResponse"
+      },
+      "ReadinessResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "default": "ok"
+          },
+          "database_reachable": {
+            "type": "boolean",
+            "title": "Database Reachable",
+            "default": true
+          },
+          "vector_extension_enabled": {
+            "type": "boolean",
+            "title": "Vector Extension Enabled",
+            "default": true
+          },
+          "migration_revision_matches_head": {
+            "type": "boolean",
+            "title": "Migration Revision Matches Head",
+            "default": true
+          },
+          "ssl_in_use": {
+            "type": "boolean",
+            "title": "Ssl In Use",
+            "default": false
+          }
+        },
+        "type": "object",
+        "title": "ReadinessResponse"
+      },
+      "RecallMemoryItem": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "user_id": {
+            "type": "string",
+            "title": "User Id"
+          },
+          "content": {
+            "type": "string",
+            "title": "Content"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "preference",
+              "goal",
+              "skill",
+              "profile",
+              "fact",
+              "other"
+            ],
+            "title": "Type"
+          },
+          "importance": {
+            "type": "number",
+            "title": "Importance"
+          },
+          "confidence": {
+            "type": "number",
+            "title": "Confidence"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          },
+          "score": {
+            "type": "number",
+            "title": "Score",
+            "description": "Combined ranking score (relevance, importance, recency, etc.)"
+          },
+          "similarity": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Similarity",
+            "description": "Pure semantic cosine similarity"
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Metadata"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "user_id",
+          "content",
+          "type",
+          "importance",
+          "confidence",
+          "source",
+          "version",
+          "score"
+        ],
+        "title": "RecallMemoryItem",
+        "description": "A single memory returned by recall with relevance and scoring details."
+      },
+      "RecallRequest": {
+        "properties": {
+          "query": {
+            "type": "string",
+            "maxLength": 2000,
+            "minLength": 1,
+            "title": "Query",
+            "description": "Natural language query or question describing memories to retrieve.",
+            "examples": [
+              "What are the user's favorite programming languages and editor preferences?"
+            ]
+          },
+          "limit": {
+            "type": "integer",
+            "maximum": 50.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "description": "Maximum number of memory items to return.",
+            "default": 5,
+            "examples": [
+              5
+            ]
+          },
+          "type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "preference",
+                  "goal",
+                  "skill",
+                  "profile",
+                  "fact",
+                  "other"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Type",
+            "description": "Optional filter: preference, goal, skill, profile, fact, or other.",
+            "examples": [
+              "preference"
+            ]
+          },
+          "user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Id",
+            "description": "Target user identifier (optional; automatically derived from authenticated API key when auth is enabled).",
+            "examples": [
+              "user_123"
+            ]
+          },
+          "min_similarity": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1.0,
+                "minimum": -1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Similarity",
+            "description": "Minimum cosine cutoff (defaults to service retrieval_min_similarity).",
+            "examples": [
+              0.4
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "query"
+        ],
+        "title": "RecallRequest",
+        "description": "Search and retrieve user memories ranked by semantic relevance and recency.",
+        "examples": [
+          {
+            "limit": 5,
+            "query": "What are the user's favorite programming languages?",
+            "type": "preference"
+          }
+        ]
+      },
+      "RecallResponse": {
+        "properties": {
+          "context": {
+            "type": "string",
+            "title": "Context",
+            "description": "Formatted markdown context block containing top relevant memories, budgeted to fit system prompt limits.",
+            "examples": [
+              "- [preference] User prefers dark mode\n- [skill] Python expert"
+            ]
+          },
+          "memories": {
+            "items": {
+              "$ref": "#/components/schemas/RecallMemoryItem"
+            },
+            "type": "array",
+            "title": "Memories",
+            "description": "List of retrieved memories with score breakdown, content, and metadata."
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count",
+            "description": "Total number of memories retrieved.",
+            "examples": [
+              2
+            ]
+          },
+          "query": {
+            "type": "string",
+            "title": "Query",
+            "description": "The query that was executed.",
+            "examples": [
+              "coding preferences"
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "context",
+          "count",
+          "query"
+        ],
+        "title": "RecallResponse",
+        "description": "Ranked memories and pre-assembled context string ready for LLM prompt injection.",
+        "examples": [
+          {
+            "context": "- [preference] User prefers dark mode\n- [skill] Python expert",
+            "count": 2,
+            "memories": [],
+            "query": "coding preferences"
+          }
+        ]
+      },
+      "RejectedCandidate": {
+        "properties": {
+          "content": {
+            "type": "string",
+            "title": "Content"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          },
+          "type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Type"
+          },
+          "importance": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Importance"
+          },
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence"
+          }
+        },
+        "type": "object",
+        "required": [
+          "content",
+          "reason"
+        ],
+        "title": "RejectedCandidate"
+      },
+      "RememberRequest": {
+        "properties": {
+          "content": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content",
+            "description": "Direct memory statement to store. 'content' or 'text' must be provided.",
+            "examples": [
+              "User prefers concise Python code snippets."
+            ]
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text",
+            "description": "Free text or conversation turn from which to extract memories when extract=true, or alias for content.",
+            "examples": [
+              "I just moved to Seattle and I work as a systems engineer."
+            ]
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "preference",
+              "goal",
+              "skill",
+              "profile",
+              "fact",
+              "other"
+            ],
+            "title": "Type",
+            "description": "Category of the memory: preference, goal, skill, profile, fact, or other",
+            "default": "fact",
+            "examples": [
+              "preference"
+            ]
+          },
+          "importance": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Importance",
+            "description": "Importance score from 0.0 to 1.0. Defaults to 0.5 (or model-assessed when extract=true).",
+            "examples": [
+              0.8
+            ]
+          },
+          "confidence": {
+            "type": "number",
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Confidence",
+            "description": "Confidence score from 0.0 to 1.0 that this memory is accurate and truthful.",
+            "default": 1.0,
+            "examples": [
+              1.0
+            ]
+          },
+          "source": {
+            "type": "string",
+            "maxLength": 512,
+            "title": "Source",
+            "description": "Source identifier (e.g. system name, conversation ID, tool call).",
+            "default": "ai_agent",
+            "examples": [
+              "ai_agent"
+            ]
+          },
+          "extract": {
+            "type": "boolean",
+            "title": "Extract",
+            "description": "When true, passes text through the LLM extraction pipeline to isolate atomic facts.",
+            "default": false,
+            "examples": [
+              false
+            ]
+          },
+          "user_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Id",
+            "description": "Target user identifier (optional; automatically derived from authenticated API key when auth is enabled).",
+            "examples": [
+              "user_123"
+            ]
+          },
+          "metadata": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Metadata",
+            "description": "Arbitrary JSON metadata attributes to attach to the memory.",
+            "examples": [
+              {
+                "topic": "coding_style"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "RememberRequest",
+        "description": "Store explicit memory or extract facts from free-form conversation text.\n\nDesigned for AI tool use: pass `content` for direct storage or `text` with `extract=true`\nto isolate atomic facts automatically.",
+        "examples": [
+          {
+            "confidence": 1.0,
+            "content": "User prefers concise Python code snippets.",
+            "extract": false,
+            "importance": 0.8,
+            "source": "chat_session_42",
+            "type": "preference"
+          },
+          {
+            "extract": true,
+            "source": "user_onboarding",
+            "text": "I just moved to Seattle and I work as a systems engineer."
+          }
+        ]
+      },
+      "RememberResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "created",
+              "deduplicated",
+              "superseded",
+              "extracted"
+            ],
+            "title": "Status",
+            "description": "Outcome category: created (new), deduplicated (existing updated), superseded (conflicting replaced), or extracted.",
+            "examples": [
+              "created"
+            ]
+          },
+          "action": {
+            "type": "string",
+            "title": "Action",
+            "description": "Specific action performed by the memory manager",
+            "examples": [
+              "created"
+            ]
+          },
+          "memory": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MemoryRead"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The primary stored or matched memory record (for single memory operations)"
+          },
+          "memories": {
+            "items": {
+              "$ref": "#/components/schemas/MemoryRead"
+            },
+            "type": "array",
+            "title": "Memories",
+            "description": "List of memories stored or extracted during this operation"
+          },
+          "count": {
+            "type": "integer",
+            "title": "Count",
+            "description": "Number of memories affected by this operation",
+            "default": 1,
+            "examples": [
+              1
+            ]
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "description": "Human and LLM-readable summary of the operation outcome",
+            "examples": [
+              "Memory created successfully."
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "action",
+          "message"
+        ],
+        "title": "RememberResponse",
+        "description": "Result of the remember tool operation.",
+        "examples": [
+          {
+            "action": "created",
+            "count": 1,
+            "memories": [],
+            "message": "Memory created successfully.",
+            "status": "created"
+          }
+        ]
+      },
+      "ScoreBreakdown": {
+        "properties": {
+          "relevance": {
+            "type": "number",
+            "title": "Relevance"
+          },
+          "importance": {
+            "type": "number",
+            "title": "Importance"
+          },
+          "confidence": {
+            "type": "number",
+            "title": "Confidence"
+          },
+          "recency": {
+            "type": "number",
+            "title": "Recency"
+          },
+          "frequency": {
+            "type": "number",
+            "title": "Frequency"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "relevance",
+          "importance",
+          "confidence",
+          "recency",
+          "frequency"
+        ],
+        "title": "ScoreBreakdown"
+      },
+      "SignupRequest": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "User Id",
+            "description": "Desired unique user identifier"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name",
+            "description": "Optional key description",
+            "default": "default"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id"
+        ],
+        "title": "SignupRequest"
+      },
+      "SignupResponse": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "User Id"
+          },
+          "api_key": {
+            "type": "string",
+            "title": "Api Key"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id",
+          "api_key",
+          "name",
+          "message"
+        ],
+        "title": "SignupResponse"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  }
+}

@@ -43,7 +43,7 @@ def resolve_me_user_id(
     return query_user_id
 
 
-@router.delete("/me/memories")
+@router.delete("/me/memories", operation_id="delete_user_memories")
 def delete_all_user_memories(
     request: Request,
     db: SessionDep,
@@ -72,7 +72,7 @@ def delete_all_user_memories(
     return {"deleted_memories": count, "user_id": target_user_id}
 
 
-@router.get("/me/export")
+@router.get("/me/export", operation_id="export_user_data")
 def export_user_data(
     request: Request,
     db: SessionDep,

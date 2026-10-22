@@ -107,7 +107,7 @@ def page(
     )
 
 
-@router.post("", response_model=MemoryRead, status_code=201)
+@router.post("", response_model=MemoryRead, status_code=201, operation_id="create_memory")
 def create_memory(
     payload: MemoryCreate,
     response: Response,
@@ -175,7 +175,7 @@ def create_memory(
     return result
 
 
-@router.get("", response_model=MemoryPage)
+@router.get("", response_model=MemoryPage, operation_id="list_memories")
 def list_memories(
     user_id: Owner,
     session: Database,
@@ -198,7 +198,7 @@ def list_memories(
         return page(session, statement, limit, offset, encryption_key=enc_key)
 
 
-@router.post("/search", response_model=MemoryPage)
+@router.post("/search", response_model=MemoryPage, operation_id="search_memories")
 def search_memories(
     payload: MemorySearch,
     session: Database,
@@ -218,7 +218,7 @@ def search_memories(
         return page(session, statement, payload.limit, payload.offset, encryption_key=enc_key)
 
 
-@router.post("/retrieve", response_model=MemoryRankedPage)
+@router.post("/retrieve", response_model=MemoryRankedPage, operation_id="retrieve_memories")
 def retrieve_memories(
     payload: MemoryRetrieve,
     session: Database,
@@ -316,7 +316,7 @@ def retrieve_memories(
         )
 
 
-@router.get("/{memory_id}", response_model=MemoryRead)
+@router.get("/{memory_id}", response_model=MemoryRead, operation_id="get_memory")
 def get_memory(
     memory_id: UUID,
     user_id: Owner,
@@ -331,7 +331,7 @@ def get_memory(
         return to_read_schema(current_memory(session, user_id, memory_id), enc_key)
 
 
-@router.get("/{memory_id}/versions", response_model=MemoryPage)
+@router.get("/{memory_id}/versions", response_model=MemoryPage, operation_id="memory_history")
 def memory_history(
     memory_id: UUID,
     user_id: Owner,
@@ -357,7 +357,7 @@ def memory_history(
         )
 
 
-@router.put("/{memory_id}", response_model=MemoryRead)
+@router.put("/{memory_id}", response_model=MemoryRead, operation_id="update_memory")
 def update_memory(
     memory_id: UUID,
     user_id: Owner,
@@ -434,7 +434,7 @@ def update_memory(
     return result
 
 
-@router.delete("/{memory_id}", status_code=204)
+@router.delete("/{memory_id}", status_code=204, operation_id="delete_memory")
 def delete_memory(
     memory_id: UUID,
     user_id: Owner,
@@ -462,7 +462,11 @@ def delete_memory(
     return Response(status_code=204)
 
 
-@router.get("/{memory_id}/provenance", response_model=MemoryProvenanceResponse)
+@router.get(
+    "/{memory_id}/provenance",
+    response_model=MemoryProvenanceResponse,
+    operation_id="memory_provenance_detail",
+)
 def get_memory_provenance(
     memory_id: UUID,
     user_id: Owner,
@@ -476,7 +480,7 @@ def get_memory_provenance(
         return get_memory_provenance_records(session, user_id, memory_id)
 
 
-@router.post("/{memory_id}/disable", response_model=MemoryRead)
+@router.post("/{memory_id}/disable", response_model=MemoryRead, operation_id="disable_memory")
 def disable_memory_endpoint(
     memory_id: UUID,
     user_id: Owner,
@@ -529,7 +533,7 @@ def disable_memory_endpoint(
         return to_read_schema(memory, enc_key)
 
 
-@router.post("/{memory_id}/enable", response_model=MemoryRead)
+@router.post("/{memory_id}/enable", response_model=MemoryRead, operation_id="enable_memory")
 def enable_memory_endpoint(
     memory_id: UUID,
     user_id: Owner,

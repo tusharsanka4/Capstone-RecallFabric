@@ -33,7 +33,10 @@ if context.is_offline_mode():
 elif context.config.attributes.get("connection") is not None:
     run(context.config.attributes["connection"])
 else:
-    engine = create_database_engine(Settings())
+    x_args = context.get_x_argument(as_dictionary=True)
+    override_url = x_args.get("url")
+    settings = Settings(database_url=override_url) if override_url else Settings()
+    engine = create_database_engine(settings)
     try:
         with engine.connect() as connection:
             run(connection)
