@@ -1,0 +1,224 @@
+{
+  "domains": [
+    {
+      "domain": "residence",
+      "fact_key": "location",
+      "initial": {
+        "user_message": "I currently live in {city_a}.",
+        "fact_content": "Lives in {city_a}",
+        "fact_type": "fact",
+        "value": "{city_a}"
+      },
+      "update": {
+        "user_message": "Quick update: I relocated and now live in {city_b}.",
+        "fact_content": "Lives in {city_b}",
+        "fact_type": "fact",
+        "value": "{city_b}"
+      },
+      "distractor": "The public transit here has {transit_feature}.",
+      "question": {
+        "text": "Where do I currently live?",
+        "expected": "{city_b}",
+        "acceptable": ["{city_b}", "You live in {city_b}.", "In {city_b}"],
+        "contradicted": ["{city_a}"]
+      },
+      "city_pairs": [
+        ["Berlin", "Tokyo", "modern subway lines"],
+        ["Toronto", "Singapore", "very punctual trains"],
+        ["Seattle", "London", "double-decker buses"],
+        ["Austin", "Amsterdam", "fantastic bike paths"],
+        ["Chicago", "Zurich", "clean tram networks"],
+        ["Paris", "Melbourne", "extensive rail lines"],
+        ["San Francisco", "Stockholm", "ferries and metros"],
+        ["Boston", "Seoul", "underground transit stations"]
+      ]
+    },
+    {
+      "domain": "diet",
+      "fact_key": "dietary_preference",
+      "initial": {
+        "user_message": "Just so you know, I follow a strict {diet_a} diet.",
+        "fact_content": "Follows a {diet_a} diet",
+        "fact_type": "preference",
+        "value": "{diet_a}"
+      },
+      "update": {
+        "user_message": "I changed my nutrition plan recently: I am now strictly {diet_b}.",
+        "fact_content": "Follows a {diet_b} diet",
+        "fact_type": "preference",
+        "value": "{diet_b}"
+      },
+      "distractor": "I noticed that groceries are {grocery_comment}.",
+      "question": {
+        "text": "What is my current dietary preference?",
+        "expected": "{diet_b}",
+        "acceptable": ["{diet_b}", "You follow a {diet_b} diet.", "{diet_b} diet"],
+        "contradicted": ["{diet_a}"]
+      },
+      "diet_pairs": [
+        ["vegan", "pescatarian", "getting more organic options"],
+        ["keto", "mediterranean", "quite fresh this season"],
+        ["vegetarian", "paleo", "stocked with fresh produce"],
+        ["gluten-free", "plant-based", "nicely packaged in recyclable boxes"],
+        ["carnivore", "low-carb", "widely available at local markets"]
+      ]
+    },
+    {
+      "domain": "programming",
+      "fact_key": "primary_language",
+      "initial": {
+        "user_message": "For all my core projects, my main programming language is {lang_a}.",
+        "fact_content": "Primary programming language is {lang_a}",
+        "fact_type": "skill",
+        "value": "{lang_a}"
+      },
+      "update": {
+        "user_message": "I transitioned all my systems and now my primary language is {lang_b}.",
+        "fact_content": "Primary programming language is {lang_b}",
+        "fact_type": "skill",
+        "value": "{lang_b}"
+      },
+      "distractor": "My code editor {editor_event} this afternoon.",
+      "question": {
+        "text": "What is my primary programming language?",
+        "expected": "{lang_b}",
+        "acceptable": ["{lang_b}", "Your primary language is {lang_b}.", "{lang_b}"],
+        "contradicted": ["{lang_a}"]
+      },
+      "lang_pairs": [
+        ["Python", "Rust", "downloaded a dark mode theme"],
+        ["JavaScript", "Go", "updated its syntax extension"],
+        ["Java", "Kotlin", "refreshed keyboard shortcuts"],
+        ["C++", "Zig", "rebuilt its indexing cache"],
+        ["Ruby", "Elixir", "configured automated formatting"]
+      ]
+    },
+    {
+      "domain": "employment",
+      "fact_key": "company",
+      "initial": {
+        "user_message": "I work full-time as an engineer at {company_a}.",
+        "fact_content": "Works as an engineer at {company_a}",
+        "fact_type": "fact",
+        "value": "{company_a}"
+      },
+      "update": {
+        "user_message": "I switched employers recently and started working at {company_b}.",
+        "fact_content": "Works as an engineer at {company_b}",
+        "fact_type": "fact",
+        "value": "{company_b}"
+      },
+      "distractor": "The office coffee machine {coffee_status}.",
+      "question": {
+        "text": "Where do I currently work?",
+        "expected": "{company_b}",
+        "acceptable": ["{company_b}", "You work at {company_b}.", "At {company_b}"],
+        "contradicted": ["{company_a}"]
+      },
+      "company_pairs": [
+        ["Stripe", "Anthropic", "was being cleaned today"],
+        ["Google", "OpenAI", "ran out of espresso beans"],
+        ["Meta", "Databricks", "was replaced with a cold brew tap"],
+        ["Amazon", "Snowflake", "had a long queue this morning"],
+        ["Microsoft", "Figma", "serves oat milk lattes"]
+      ]
+    },
+    {
+      "domain": "morning_beverage",
+      "fact_key": "beverage",
+      "initial": {
+        "user_message": "Every morning I always drink {drink_a}.",
+        "fact_content": "Drinks {drink_a} every morning",
+        "fact_type": "preference",
+        "value": "{drink_a}"
+      },
+      "update": {
+        "user_message": "I changed my routine and now I only drink {drink_b} in the morning.",
+        "fact_content": "Drinks {drink_b} every morning",
+        "fact_type": "preference",
+        "value": "{drink_b}"
+      },
+      "distractor": "My favorite mug {mug_status}.",
+      "question": {
+        "text": "What do I drink in the morning?",
+        "expected": "{drink_b}",
+        "acceptable": ["{drink_b}", "You drink {drink_b}.", "{drink_b} in the morning"],
+        "contradicted": ["{drink_a}"]
+      },
+      "beverage_pairs": [
+        ["espresso", "matcha latte", "is made of handcrafted ceramic"],
+        ["black coffee", "earl grey tea", "keeps liquids hot for hours"],
+        ["energy drinks", "herbal chamomile tea", "was a souvenir from a trip"],
+        ["cappuccino", "warm lemon water", "has a tiny chip on the handle"]
+      ]
+    }
+  ],
+  "stable_facts": [
+    {
+      "fact_key": "pet",
+      "user_message": "I adopted a friendly golden retriever named Max.",
+      "fact_content": "Has a golden retriever named Max",
+      "fact_type": "fact",
+      "question": "What kind of pet do I have and what is its name?",
+      "expected": "Golden retriever named Max",
+      "acceptable": ["Golden retriever named Max", "Max", "golden retriever"],
+      "contradicted": ["cat", "parrot", "rabbit"]
+    },
+    {
+      "fact_key": "birthplace",
+      "user_message": "I was born and raised in Vancouver, Canada.",
+      "fact_content": "Born in Vancouver, Canada",
+      "fact_type": "fact",
+      "question": "Where was I born?",
+      "expected": "Vancouver",
+      "acceptable": ["Vancouver", "Vancouver, Canada", "In Vancouver"],
+      "contradicted": ["Toronto", "New York", "London"]
+    },
+    {
+      "fact_key": "hobby",
+      "user_message": "In my spare time, I love playing acoustic guitar.",
+      "fact_content": "Plays acoustic guitar as a hobby",
+      "fact_type": "fact",
+      "question": "What instrument or hobby do I play in my spare time?",
+      "expected": "Acoustic guitar",
+      "acceptable": ["Acoustic guitar", "guitar", "plays acoustic guitar"],
+      "contradicted": ["piano", "drums", "violin"]
+    },
+    {
+      "fact_key": "favorite_color",
+      "user_message": "My absolute favorite color has always been emerald green.",
+      "fact_content": "Favorite color is emerald green",
+      "fact_type": "preference",
+      "question": "What is my favorite color?",
+      "expected": "Emerald green",
+      "acceptable": ["Emerald green", "green"],
+      "contradicted": ["red", "blue", "purple"]
+    }
+  ],
+  "distractors": [
+    "The weather outside is surprisingly sunny today.",
+    "I took a short fifteen-minute walk around the block earlier.",
+    "I wonder what movie is premiering at the cinema this weekend.",
+    "The elevator in my building was under routine maintenance today.",
+    "Can you believe how quickly this month has flown by?",
+    "I need to remember to water my indoor plants later tonight.",
+    "I'm listening to a lo-fi instrumental playlist right now.",
+    "The traffic was a little congested near downtown earlier.",
+    "I should clean my desk before beginning the afternoon tasks.",
+    "It smells like freshly baked bread from the bakery down the street."
+  ],
+  "distractor_questions": [
+    {
+      "question": "What is my favorite movie genre?",
+      "expected": "Not specified",
+      "acceptable": ["Not specified", "You haven't mentioned a favorite movie genre", "I don't know", "No information"],
+      "contradicted": ["Horror", "Action", "Romance"]
+    },
+    {
+      "question": "What car model do I own?",
+      "expected": "Not specified",
+      "acceptable": ["Not specified", "You have not mentioned your car", "I don't know", "No car mentioned"],
+      "contradicted": ["Ferrari", "Toyota", "Ford Mustang"]
+    }
+  ]
+}

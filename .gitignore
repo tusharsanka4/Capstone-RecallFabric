@@ -18,3 +18,5 @@ build/
 .vscode/
 
 ollama.zip
+evaluation/results/*.json
+evaluation/results/20*

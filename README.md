@@ -439,6 +439,7 @@ src/recallfabric/
   api/providers.py List configured providers and reachability endpoint
   api/auth.py      API key creation, listing, and revocation endpoints
   api/users.py     User data export and bulk deletion endpoints
+  evaluation/      Evaluation framework, benchmarks, ablation studies, and scale tests
   security/        Authentication, rate limiting, encryption, and audit logging
   providers/       Model-independent LLM provider layer (Ollama, OpenAI, Anthropic, Gemini)
   extraction/      Quality filters and extraction prompt
@@ -463,4 +464,41 @@ tests/             Unit and opt-in database integration checks
 pyproject.toml     Package, dependencies, and development tooling
 ```
 
+---
+
+## Evaluation & Benchmarking Framework (M17 & M18)
+
+RecallFabric includes an automated evaluation and research benchmarking suite comparing three systems under identical multi-session workloads:
+- **(A) Baseline LLM with no memory**: Zero-shot standard prompts without cross-session memory.
+- **(B) Basic vector memory**: Stores raw messages and performs naive top-k cosine similarity retrieval.
+- **(C) Full RecallFabric**: Atomic fact extraction, candidate filtering, deduplication, conflict superseding, and multi-factor ranking.
+
+### Commands
+
+```bash
+# 1. Run basic evaluation benchmark (A vs B vs C)
+uv run python -m recallfabric.evaluation run --config evaluation/config.yaml
+
+# 2. Run full research benchmark suite across repeated seeds, presets, ablations, and scale tests
+uv run python -m recallfabric.evaluation benchmark --seeds 42,43,44
+
+# 3. Regenerate REPORT.md and charts from raw results in one command
+uv run python -m recallfabric.evaluation report --results evaluation/results/benchmark_raw.json
+```
+
+### Runtime and Cost Expectations
+
+| Provider / Setup | Workload | Approx. Runtime | Approx. API Cost |
+| :--- | :--- | :--- | :--- |
+| **Mock Provider & Deterministic Embedder** (Default Offline) | 50 multi-session convs (183 questions, 3 seeds) | ~10–15 seconds | **$0.00** |
+| **Local Ollama** (`llama3.2` + `fastembed`) | 50 multi-session convs | ~2–4 minutes (GPU dependent) | **$0.00** |
+| **OpenAI** (`gpt-4o-mini`) | 50 multi-session convs | ~1–2 minutes | **~$0.06 – $0.12** |
+| **Anthropic** (`claude-3-5-haiku`) | 50 multi-session convs | ~1–2 minutes | **~$0.08 – $0.15** |
+| **OpenAI / Anthropic** (`gpt-4o` / `claude-3-5-sonnet`) | 50 multi-session convs | ~3–5 minutes | **~$0.60 – $1.20** |
+
+All synthetic multi-session conversation datasets, ranking weights, and scale benchmarks are seeded and 100% reproducible. Results, markdown reports, and generated charts are saved to `evaluation/results/`.
+
+---
+
 See `RecallFabric_Implementation_Plan.pdf` for the full implementation roadmap.
+
