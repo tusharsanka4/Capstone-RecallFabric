@@ -22,7 +22,7 @@ class EmbeddingRequest(BaseModel):
     kind: EmbeddingKind = "query"
 
 
-@router.post("", response_model=EmbeddingResult)
+@router.post("", response_model=EmbeddingResult, operation_id="generate_embedding")
 def generate_embedding(
     payload: EmbeddingRequest,
     provider: Annotated[EmbeddingProvider, Depends(get_embedding_provider)],

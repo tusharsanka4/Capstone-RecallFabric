@@ -1,0 +1,129 @@
+name: CI / CD Pipeline
+
+on:
+  push:
+    branches: [main, master]
+    tags: ['v*']
+  pull_request:
+    branches: [main, master]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Code Quality & Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+          enable-cache: true
+
+      - name: Set up Python 3.12
+        run: uv python install 3.12
+
+      - name: Run Ruff Linter
+        run: uv run ruff check .
+
+      - name: Check OpenAPI and Tool Schema Drift
+        run: uv run python scripts/generate_tool_schemas.py --check
+
+  test:
+    name: Test Suite (Unit + PostgreSQL pgvector Integration)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:0.8.6-pg17-bookworm
+        env:
+          POSTGRES_DB: recallfabric
+          POSTGRES_USER: recallfabric
+          POSTGRES_PASSWORD: recallfabric_local
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+          enable-cache: true
+
+      - name: Set up Python 3.12
+        run: uv python install 3.12
+
+      - name: Sync dependencies
+        run: uv sync --frozen
+
+      - name: Run database migrations
+        env:
+          RECALLFABRIC_DB_HOST: 127.0.0.1
+          RECALLFABRIC_DB_PORT: 5432
+          RECALLFABRIC_DB_NAME: recallfabric
+          RECALLFABRIC_DB_USER: recallfabric
+          RECALLFABRIC_DB_PASSWORD: recallfabric_local
+        run: uv run alembic upgrade head
+
+      - name: Run all tests (unit and DB integration)
+        env:
+          RECALLFABRIC_RUN_DB_TESTS: "1"
+          RECALLFABRIC_DB_HOST: 127.0.0.1
+          RECALLFABRIC_DB_PORT: 5432
+          RECALLFABRIC_DB_NAME: recallfabric
+          RECALLFABRIC_DB_USER: recallfabric
+          RECALLFABRIC_DB_PASSWORD: recallfabric_local
+          RECALLFABRIC_ENVIRONMENT: test
+        run: uv run pytest -v
+
+  build-and-deploy:
+    name: Build Docker Image
+    needs: [lint, test]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          tags: recallfabric:${{ github.sha }}
+
+      - name: Log in to GitHub Container Registry (on Tag)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and Push Docker Image (on Tag)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}:${{ github.ref_name }}
+            ghcr.io/${{ github.repository }}:latest

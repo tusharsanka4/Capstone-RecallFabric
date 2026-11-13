@@ -1,0 +1,41 @@
+# RecallFabric Evaluation Configuration
+
+dataset_path: "evaluation/data/dataset.jsonl"
+results_dir: "evaluation/results"
+k: 5
+
+systems:
+  - "no_memory"
+  - "basic_vector"
+  - "recallfabric"
+
+# Provider configuration using the RecallFabric provider layer
+# Options: "mock" (offline test provider), "ollama", "openai", "anthropic", "gemini"
+provider:
+  name: "mock"
+  model: "mock-eval-v1"
+  temperature: 0.1
+  timeout: 30.0
+
+# Embedder configuration
+# Options: "deterministic" (fast semantic hash dense vectors) or "fastembed"
+embedder:
+  type: "deterministic"
+  model: "test-retrieval-model"
+
+# Evaluation metrics
+metrics:
+  exact_match: true
+  fuzzy_match: true
+  llm_judge: false
+  retrieval_k:
+    - 1
+    - 3
+    - 5
+  hallucination_check: true
+  conflict_accuracy: true
+  latency_tracking: true
+  memory_efficiency: true
+
+# Optional conversation limit (set to null to run full dataset)
+limit_conversations: null

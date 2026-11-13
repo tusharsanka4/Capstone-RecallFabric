@@ -1,0 +1,49 @@
+# fly.toml app configuration file for RecallFabric API
+
+app = "recallfabric"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_stop_machines = true
+  auto_start_machines = true
+  min_machines_running = 0
+
+[[http_service.checks]]
+  grace_period = "15s"
+  interval = "30s"
+  method = "GET"
+  path = "/health"
+  timeout = "5s"
+
+# Free-tier / Machine sizing notes:
+# - Local FastEmbed model inference requires ~300-400MB RAM.
+# - 1024MB (1GB) RAM is recommended to avoid OOM crashes.
+# - If running on 512MB RAM, set RECALLFABRIC_EMBEDDING_PROVIDER="openai" to offload embedding weights.
+[vm]
+  cpu_kind = "shared"
+  cpus = 1
+  memory_mb = 1024
+
+[env]
+  RECALLFABRIC_ENVIRONMENT = "production"
+  RECALLFABRIC_DB_SSLMODE = "require"
+  RECALLFABRIC_RUN_MIGRATIONS = "true"
+  RECALLFABRIC_WORKERS = "1"
+  RECALLFABRIC_AUTH_ENABLED = "true"
+  RECALLFABRIC_CORS_ORIGINS = "*"
+  RECALLFABRIC_LLM_PROVIDER = "openai"
+  RECALLFABRIC_OPENAI_MODEL = "gpt-4o-mini"
+  RECALLFABRIC_EMBEDDING_PROVIDER = "fastembed"
+  RECALLFABRIC_DB_POOL_PRE_PING = "true"
+  RECALLFABRIC_DB_POOL_RECYCLE = "1800"
+
+# Mark and inject sensitive credentials via fly secrets:
+# fly secrets set RECALLFABRIC_DATABASE_URL="postgresql://..." \
+#                 RECALLFABRIC_ADMIN_TOKEN="..." \
+#                 RECALLFABRIC_ENCRYPTION_KEY="..." \
+#                 RECALLFABRIC_OPENAI_API_KEY="..."

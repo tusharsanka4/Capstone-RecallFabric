@@ -26,6 +26,7 @@ class MemoryFields(BaseModel):
 
 class MemoryCreate(MemoryFields):
     user_id: Annotated[NonemptyText, Field(max_length=255)]
+    deduplicate: bool = False
 
 
 class MemoryUpdate(MemoryFields):
@@ -44,11 +45,11 @@ class MemorySearch(BaseModel):
     offset: int = Field(default=0, ge=0)
 
 
-class MemoryRead(MemoryCreate):
-    # ORM calls the JSON column attributes because SQLAlchemy reserves metadata.
+class MemoryRead(MemoryFields):
     model_config = ConfigDict(from_attributes=True, populate_by_name=True, extra="forbid")
 
     id: UUID
+    user_id: Annotated[NonemptyText, Field(max_length=255)]
     version: int = Field(ge=1)
     previous_version: int | None = Field(default=None, ge=1)
     status: MemoryStatus
@@ -59,6 +60,9 @@ class MemoryRead(MemoryCreate):
     updated_at: datetime
     last_accessed_at: datetime | None = None
     access_count: int = Field(ge=0)
+    action: Literal["created", "consolidated", "ignored"] | None = None
+    matched_memory_id: UUID | None = None
+    conflict_resolution: dict[str, JsonValue] | None = None
 
 
 class MemoryPage(BaseModel):
@@ -76,10 +80,23 @@ class MemoryRetrieve(BaseModel):
     type: MemoryType | None = None
     status: Literal["active", "disabled"] = "active"
     limit: int = Field(default=20, ge=1, le=100)
+    min_score: float | None = Field(default=None, ge=-1.0, le=1.0)
+    track_access: bool = True
+
+
+class ScoreBreakdown(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    relevance: float
+    importance: float
+    confidence: float
+    recency: float
+    frequency: float
 
 
 class MemoryRanked(MemoryRead):
     score: float
+    score_breakdown: ScoreBreakdown | None = None
 
 
 class MemoryRankedPage(BaseModel):

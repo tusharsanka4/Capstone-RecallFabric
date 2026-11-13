@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>RecallFabric Options</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #0f172a;
+      color: #f8fafc;
+      margin: 0;
+      padding: 24px;
+      width: 440px;
+    }
+    h2 {
+      margin-top: 0;
+      color: #38bdf8;
+      font-size: 1.25rem;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .form-group {
+      margin-bottom: 16px;
+    }
+    label {
+      display: block;
+      font-size: 0.85rem;
+      font-weight: 600;
+      margin-bottom: 6px;
+      color: #94a3b8;
+    }
+    input[type="text"], input[type="password"], input[type="number"] {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 8px 12px;
+      border-radius: 6px;
+      border: 1px solid #334155;
+      background: #1e293b;
+      color: #f8fafc;
+      font-size: 0.9rem;
+    }
+    input:focus {
+      outline: none;
+      border-color: #38bdf8;
+      box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.2);
+    }
+    .actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 20px;
+    }
+    button {
+      flex: 1;
+      padding: 10px;
+      border-radius: 6px;
+      border: none;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 0.9rem;
+      transition: background 0.2s;
+    }
+    .btn-primary {
+      background: #0284c7;
+      color: white;
+    }
+    .btn-primary:hover {
+      background: #0369a1;
+    }
+    .btn-secondary {
+      background: #334155;
+      color: #f8fafc;
+    }
+    .btn-secondary:hover {
+      background: #475569;
+    }
+    #status {
+      margin-top: 12px;
+      font-size: 0.85rem;
+      text-align: center;
+      min-height: 20px;
+    }
+    .text-success { color: #4ade80; }
+    .text-error { color: #f87171; }
+  </style>
+</head>
+<body>
+  <h2>🧠 RecallFabric Settings</h2>
+  
+  <div class="form-group">
+    <label for="baseUrl">RecallFabric Base URL</label>
+    <input type="text" id="baseUrl" placeholder="http://localhost:8000" />
+  </div>
+
+  <div class="form-group">
+    <label for="apiKey">RecallFabric API Key (rf_...)</label>
+    <input type="password" id="apiKey" placeholder="Leave empty if auth disabled" />
+  </div>
+
+  <div class="form-group">
+    <label for="userId">User ID</label>
+    <input type="text" id="userId" placeholder="default_user" />
+  </div>
+
+  <div class="form-group">
+    <label for="limit">Recall Limit (Memories to retrieve)</label>
+    <input type="number" id="limit" min="1" max="20" value="5" />
+  </div>
+
+  <div class="form-group">
+    <label for="charBudget">Character Budget</label>
+    <input type="number" id="charBudget" min="200" max="10000" value="2000" />
+  </div>
+
+  <div class="actions">
+    <button id="saveBtn" class="btn-primary">Save Settings</button>
+    <button id="testBtn" class="btn-secondary">Test Connection</button>
+  </div>
+
+  <div id="status"></div>
+
+  <script src="options.js"></script>
+</body>
+</html>

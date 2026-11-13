@@ -1,0 +1,357 @@
+[
+  {
+    "name": "remember",
+    "description": "Store an explicit memory statement or extract atomic facts from conversation text. Use `content` for direct storage (preferences, facts, goals, etc.) with automatic deduplication and conflict superseding. Set `extract=true` to automatically analyze conversation turns and extract isolated facts.",
+    "parameters": {
+      "additionalProperties": false,
+      "description": "Store explicit memory or extract facts from free-form conversation text.\n\nDesigned for AI tool use: pass `content` for direct storage or `text` with `extract=true`\nto isolate atomic facts automatically.",
+      "examples": [
+        {
+          "confidence": 1.0,
+          "content": "User prefers concise Python code snippets.",
+          "extract": false,
+          "importance": 0.8,
+          "source": "chat_session_42",
+          "type": "preference"
+        },
+        {
+          "extract": true,
+          "source": "user_onboarding",
+          "text": "I just moved to Seattle and I work as a systems engineer."
+        }
+      ],
+      "properties": {
+        "content": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Direct memory statement to store. 'content' or 'text' must be provided.",
+          "examples": [
+            "User prefers concise Python code snippets."
+          ],
+          "title": "Content"
+        },
+        "text": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Free text or conversation turn from which to extract memories when extract=true, or alias for content.",
+          "examples": [
+            "I just moved to Seattle and I work as a systems engineer."
+          ],
+          "title": "Text"
+        },
+        "type": {
+          "default": "fact",
+          "description": "Category of the memory: preference, goal, skill, profile, fact, or other",
+          "enum": [
+            "preference",
+            "goal",
+            "skill",
+            "profile",
+            "fact",
+            "other"
+          ],
+          "examples": [
+            "preference"
+          ],
+          "title": "Type",
+          "type": "string"
+        },
+        "importance": {
+          "anyOf": [
+            {
+              "maximum": 1,
+              "minimum": 0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Importance score from 0.0 to 1.0. Defaults to 0.5 (or model-assessed when extract=true).",
+          "examples": [
+            0.8
+          ],
+          "title": "Importance"
+        },
+        "confidence": {
+          "default": 1.0,
+          "description": "Confidence score from 0.0 to 1.0 that this memory is accurate and truthful.",
+          "examples": [
+            1.0
+          ],
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Confidence",
+          "type": "number"
+        },
+        "source": {
+          "default": "ai_agent",
+          "description": "Source identifier (e.g. system name, conversation ID, tool call).",
+          "examples": [
+            "ai_agent"
+          ],
+          "maxLength": 512,
+          "title": "Source",
+          "type": "string"
+        },
+        "extract": {
+          "default": false,
+          "description": "When true, passes text through the LLM extraction pipeline to isolate atomic facts.",
+          "examples": [
+            false
+          ],
+          "title": "Extract",
+          "type": "boolean"
+        },
+        "user_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Target user identifier (optional; automatically derived from authenticated API key when auth is enabled).",
+          "examples": [
+            "user_123"
+          ],
+          "title": "User Id"
+        },
+        "metadata": {
+          "additionalProperties": true,
+          "description": "Arbitrary JSON metadata attributes to attach to the memory.",
+          "examples": [
+            {
+              "topic": "coding_style"
+            }
+          ],
+          "title": "Metadata",
+          "type": "object"
+        }
+      },
+      "type": "object"
+    }
+  },
+  {
+    "name": "recall",
+    "description": "Retrieve relevant user memories for a query, ranked by multi-factor relevance (semantic similarity, importance, recency, and access frequency). Returns a structured list of memories and a pre-formatted, character-budgeted `context` markdown string ready for system prompt injection.",
+    "parameters": {
+      "additionalProperties": false,
+      "description": "Search and retrieve user memories ranked by semantic relevance and recency.",
+      "examples": [
+        {
+          "limit": 5,
+          "query": "What are the user's favorite programming languages?",
+          "type": "preference"
+        }
+      ],
+      "properties": {
+        "query": {
+          "description": "Natural language query or question describing memories to retrieve.",
+          "examples": [
+            "What are the user's favorite programming languages and editor preferences?"
+          ],
+          "maxLength": 2000,
+          "minLength": 1,
+          "title": "Query",
+          "type": "string"
+        },
+        "limit": {
+          "default": 5,
+          "description": "Maximum number of memory items to return.",
+          "examples": [
+            5
+          ],
+          "maximum": 50,
+          "minimum": 1,
+          "title": "Limit",
+          "type": "integer"
+        },
+        "type": {
+          "anyOf": [
+            {
+              "enum": [
+                "preference",
+                "goal",
+                "skill",
+                "profile",
+                "fact",
+                "other"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional filter: preference, goal, skill, profile, fact, or other.",
+          "examples": [
+            "preference"
+          ],
+          "title": "Type"
+        },
+        "user_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Target user identifier (optional; automatically derived from authenticated API key when auth is enabled).",
+          "examples": [
+            "user_123"
+          ],
+          "title": "User Id"
+        },
+        "min_similarity": {
+          "anyOf": [
+            {
+              "maximum": 1.0,
+              "minimum": -1.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Minimum cosine cutoff (defaults to service retrieval_min_similarity).",
+          "examples": [
+            0.4
+          ],
+          "title": "Min Similarity"
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "name": "forget",
+    "description": "Delete a user memory either by its exact UUID (`memory_id`), or by semantically finding the best match for a `query`. When searching by query without `confirm=true`, the endpoint returns the candidate memory awaiting confirmation. Pass `confirm=true` to confirm permanent deletion.",
+    "parameters": {
+      "additionalProperties": false,
+      "description": "Delete a memory by ID or search for it semantically with confirmation.",
+      "examples": [
+        {
+          "confirm": false,
+          "query": "User dislikes spicy food"
+        },
+        {
+          "confirm": true,
+          "memory_id": "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d"
+        }
+      ],
+      "properties": {
+        "memory_id": {
+          "anyOf": [
+            {
+              "format": "uuid",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Exact UUID of the memory to forget/delete.",
+          "examples": [
+            "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d"
+          ],
+          "title": "Memory Id"
+        },
+        "query": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Semantic search query to find the memory to delete if memory_id is unknown.",
+          "examples": [
+            "User dislikes spicy food"
+          ],
+          "title": "Query"
+        },
+        "confirm": {
+          "default": false,
+          "description": "Confirmation flag. When false and using query, returns candidate memory without deleting. When true, permanently deletes it.",
+          "examples": [
+            false
+          ],
+          "title": "Confirm",
+          "type": "boolean"
+        },
+        "user_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Target user identifier (optional; automatically derived from authenticated API key when auth is enabled).",
+          "examples": [
+            "user_123"
+          ],
+          "title": "User Id"
+        }
+      },
+      "type": "object"
+    }
+  },
+  {
+    "name": "profile",
+    "description": "Retrieve a compact summary of the user's active memories organized by category (preferences, profile, goals, skills, facts). Returns a pre-assembled markdown profile ready for context injection.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "user_id": {
+          "type": "string",
+          "description": "Target user identifier (optional; automatically derived from authenticated API key when auth is enabled)."
+        },
+        "limit": {
+          "type": "integer",
+          "description": "Max active memories to include in summary (default: 20).",
+          "default": 20
+        }
+      }
+    }
+  },
+  {
+    "name": "capabilities",
+    "description": "Inspect service version, active embedding model details, supported memory categories, enabled security features, and operational limits.",
+    "parameters": {
+      "type": "object",
+      "properties": {}
+    }
+  }
+]

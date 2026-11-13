@@ -12,6 +12,8 @@ from fastapi.testclient import TestClient
 from sqlalchemy import event, select, text, update
 from sqlalchemy.exc import OperationalError
 
+from recallfabric.api.chat import get_llm_client as get_chat_llm_client
+from recallfabric.api.extraction import get_llm_client as get_extract_llm_client
 from recallfabric.core.config import Settings
 from recallfabric.db.connection import create_database_engine, get_database_engine
 from recallfabric.db.models import Memory
@@ -22,6 +24,7 @@ from recallfabric.embeddings.service import (
     get_embedding_provider,
 )
 from recallfabric.main import create_app
+from recallfabric.providers import LLMProvider, ProviderResponse
 
 pytestmark = [
     pytest.mark.integration,
@@ -45,6 +48,33 @@ class FakeEmbedder:
         if self.fail:
             raise EmbeddingUnavailable()
         return EmbeddingResult(model=self.model_id, dimensions=3, vector=[1, len(text), 0.5])
+
+
+class IntegrationFakeProvider(LLMProvider):
+    name = "integration-fake"
+    model = "integration-fake-v1"
+
+    def __init__(self):
+        self.calls = []
+
+    def chat(self, messages, temperature=0.0, max_tokens=None, json_mode=False):
+        self.calls.append(messages)
+        if json_mode:
+            return ProviderResponse(
+                '{"memories": [{"content": "User prefers concise technical explanations",'
+                '"type": "preference", "importance": 0.8, "confidence": 0.9,'
+                '"creation_reason": "Direct preference"}]}',
+                name=self.name,
+                model=self.model,
+            )
+        return ProviderResponse(
+            "The response used the stored preference.",
+            name=self.name,
+            model=self.model,
+        )
+
+    def is_available(self):
+        return True
 
 
 @pytest.fixture
@@ -103,6 +133,79 @@ def create(client, **changes):
     response = client.post("/memories", json=payload(**changes))
     assert response.status_code == 201, response.text
     return response
+
+
+def test_end_to_end_extraction_retrieval_chat_lifecycle(api):
+    client, engine = api
+    chat_provider = IntegrationFakeProvider()
+    extraction_provider = IntegrationFakeProvider()
+    client.app.dependency_overrides[get_chat_llm_client] = lambda: chat_provider
+    client.app.dependency_overrides[get_extract_llm_client] = lambda: extraction_provider
+    user_id = "e2e_" + uuid4().hex
+
+    extracted = client.post(
+        "/extraction",
+        json={
+            "user_id": user_id,
+            "text": "I prefer concise technical explanations.",
+            "source": "e2e-conversation",
+            "dry_run": False,
+            "deduplicate": True,
+        },
+    )
+    assert extracted.status_code == 201, extracted.text
+    memories = extracted.json()["extracted"]
+    assert len(memories) == 1
+    memory_id = memories[0]["id"]
+    assert memories[0]["version"] == 1
+
+    retrieved = client.post(
+        "/memories/search",
+        json={"user_id": user_id, "query": "concise technical explanations"},
+    )
+    assert retrieved.status_code == 200
+    assert retrieved.json()["items"][0]["id"] == memory_id
+
+    chat = client.post(
+        "/chat",
+        json={"user_id": user_id, "message": "How should you explain things?"},
+    )
+    assert chat.status_code == 200, chat.text
+    assert chat.json()["reply"] == "The response used the stored preference."
+    assert chat.json()["memories_used"][0]["id"] == memory_id
+    assert any(
+        "concise technical explanations" in message["content"]
+        for call in chat_provider.calls
+        for message in call
+    )
+
+    updated = client.put(
+        f"/memories/{memory_id}",
+        params={"user_id": user_id},
+        json=replacement(
+            content="User prefers concise and evidence-based technical explanations",
+            source="e2e-update",
+        ),
+    )
+    assert updated.status_code == 200
+    assert updated.json()["version"] == 2
+    assert updated.json()["previous_version"] == 1
+    assert (
+        client.get(f"/memories/{memory_id}/versions", params={"user_id": user_id}).status_code
+        == 200
+    )
+    provenance = client.get(f"/memories/{memory_id}/provenance", params={"user_id": user_id})
+    assert provenance.status_code == 200
+    assert {event["event_type"] for event in provenance.json()["events"]} >= {
+        "created",
+        "superseded",
+    }
+
+    assert client.get(f"/memories/{memory_id}", params={"user_id": "other-user"}).status_code == 404
+    assert client.delete(f"/memories/{memory_id}", params={"user_id": user_id}).status_code == 204
+    assert client.get(f"/memories/{memory_id}", params={"user_id": user_id}).status_code == 404
+    with engine.connect() as connection:
+        assert connection.execute(select(Memory).where(Memory.id == memory_id)).all() == []
 
 
 def test_create_get_update_history_and_delete(api):
@@ -333,3 +436,29 @@ def test_database_errors_are_sanitized(api):
         assert client.get("/health").status_code == 200
     finally:
         event.remove(engine, "before_cursor_execute", fail)
+
+
+def test_disable_and_enable_endpoints(api):
+    client, _ = api
+    item = create(client).json()
+    path = f"/memories/{item['id']}"
+
+    dis_resp = client.post(f"{path}/disable", params={"user_id": "alice"})
+    assert dis_resp.status_code == 200
+    assert dis_resp.json()["status"] == "disabled"
+    assert dis_resp.json()["version"] == 2
+
+    dis_resp2 = client.post(f"{path}/disable", params={"user_id": "alice"})
+    assert dis_resp2.status_code == 200
+    assert dis_resp2.json()["status"] == "disabled"
+    assert dis_resp2.json()["version"] == 2
+
+    ena_resp = client.post(f"{path}/enable", params={"user_id": "alice"})
+    assert ena_resp.status_code == 200
+    assert ena_resp.json()["status"] == "active"
+    assert ena_resp.json()["version"] == 3
+
+    prov_resp = client.get(f"{path}/provenance", params={"user_id": "alice"})
+    assert prov_resp.status_code == 200
+    events = prov_resp.json()["events"]
+    assert [e["event_type"] for e in events] == ["created", "disabled", "enabled"]

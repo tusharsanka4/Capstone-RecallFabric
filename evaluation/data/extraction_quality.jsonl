@@ -1,0 +1,30 @@
+{"case_id":"pref_01","category":"preference","text":"I prefer concise technical explanations.","expected_keywords":["prefer","concise","technical","explanations"],"should_extract":true}
+{"case_id":"pref_02","category":"preference","text":"I enjoy dark mode interfaces.","expected_keywords":["enjoy","dark mode"],"should_extract":true}
+{"case_id":"pref_03","category":"preference","text":"I like working with Python.","expected_keywords":["like","python"],"should_extract":true}
+{"case_id":"pref_04","category":"preference","text":"I prefer PostgreSQL for application databases.","expected_keywords":["prefer","postgresql","databases"],"should_extract":true}
+{"case_id":"pref_05","category":"preference","text":"I want concise answers with code examples.","expected_keywords":["want","concise","code examples"],"should_extract":true}
+{"case_id":"project_01","category":"project","text":"I am currently building a project called RecallFabric.","expected_keywords":["building","recallfabric"],"should_extract":true}
+{"case_id":"project_02","category":"project","text":"I am developing a browser extension for my research project.","expected_keywords":["developing","browser extension","project"],"should_extract":true}
+{"case_id":"project_03","category":"project","text":"I am working on an evaluation framework for AI memory.","expected_keywords":["working","evaluation framework","ai memory"],"should_extract":true}
+{"case_id":"project_04","category":"project","text":"I am preparing a migration plan for our legacy service.","expected_keywords":["preparing","migration plan","legacy service"],"should_extract":true}
+{"case_id":"project_05","category":"project","text":"I am building a semantic search prototype.","expected_keywords":["building","semantic search","prototype"],"should_extract":true}
+{"case_id":"skill_01","category":"skill","text":"I work with Python and FastAPI.","expected_keywords":["python","fastapi"],"should_extract":true}
+{"case_id":"skill_02","category":"skill","text":"I know how to operate PostgreSQL databases.","expected_keywords":["operate","postgresql","databases"],"should_extract":true}
+{"case_id":"skill_03","category":"skill","text":"I have experience with Docker Compose.","expected_keywords":["experience","docker compose"],"should_extract":true}
+{"case_id":"skill_04","category":"skill","text":"I use TypeScript for frontend tooling.","expected_keywords":["typescript","frontend"],"should_extract":true}
+{"case_id":"skill_05","category":"skill","text":"I can design REST APIs.","expected_keywords":["design","rest apis"],"should_extract":true}
+{"case_id":"goal_01","category":"goal","text":"I want to improve my retrieval ranking algorithm.","expected_keywords":["want","improve","retrieval ranking"],"should_extract":true}
+{"case_id":"goal_02","category":"goal","text":"My goal is to publish a paper about memory systems.","expected_keywords":["goal","publish","paper","memory systems"],"should_extract":true}
+{"case_id":"goal_03","category":"goal","text":"I plan to learn more about vector databases.","expected_keywords":["plan","learn","vector databases"],"should_extract":true}
+{"case_id":"career_01","category":"career","text":"I work as a backend engineer.","expected_keywords":["work","backend engineer"],"should_extract":true}
+{"case_id":"career_02","category":"career","text":"I am looking for a platform engineering role.","expected_keywords":["looking","platform engineering","role"],"should_extract":true}
+{"case_id":"multi_01","category":"multiple","text":"I prefer concise answers and I use Python every day.","expected_keywords":["prefer","concise","python"],"should_extract":true}
+{"case_id":"multi_02","category":"multiple","text":"I live in Berlin and work on cloud infrastructure.","expected_keywords":["live","berlin","cloud infrastructure"],"should_extract":true}
+{"case_id":"multi_03","category":"multiple","text":"I like PostgreSQL and I am building a retrieval service.","expected_keywords":["like","postgresql","building","retrieval service"],"should_extract":true}
+{"case_id":"temporary_01","category":"temporary","text":"I am currently commuting home.","expected_keywords":[],"should_extract":false}
+{"case_id":"temporary_02","category":"temporary","text":"I am heading home right now.","expected_keywords":[],"should_extract":false}
+{"case_id":"temporary_03","category":"temporary","text":"I am currently waiting for a delivery.","expected_keywords":[],"should_extract":false}
+{"case_id":"irrelevant_01","category":"irrelevant","text":"The weather is sunny today.","expected_keywords":[],"should_extract":false}
+{"case_id":"irrelevant_02","category":"irrelevant","text":"How are you doing today?","expected_keywords":[],"should_extract":false}
+{"case_id":"irrelevant_03","category":"irrelevant","text":"Please remember to buy milk this evening.","expected_keywords":[],"should_extract":false}
+{"case_id":"ambiguous_01","category":"ambiguous","text":"Maybe I will move to London someday.","expected_keywords":[],"should_extract":false}

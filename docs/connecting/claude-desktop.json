@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "recallfabric": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-remote",
+        "https://api.recallfabric.example.com/mcp",
+        "--header",
+        "Authorization: Bearer YOUR_RECALLFABRIC_API_KEY"
+      ]
+    }
+  }
+}

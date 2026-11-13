@@ -1,0 +1,35 @@
+{
+  "name": "@recallfabric/client",
+  "version": "0.1.0",
+  "description": "Official JavaScript/TypeScript SDK for RecallFabric persistent memory service",
+  "main": "./index.js",
+  "module": "./index.mjs",
+  "types": "./index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "import": "./index.mjs",
+      "require": "./index.js"
+    }
+  },
+  "files": [
+    "index.js",
+    "index.mjs",
+    "index.d.ts",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "recallfabric",
+    "memory",
+    "ai",
+    "agents",
+    "llm",
+    "context",
+    "rag"
+  ],
+  "author": "RecallFabric Team",
+  "license": "Apache-2.0"
+}

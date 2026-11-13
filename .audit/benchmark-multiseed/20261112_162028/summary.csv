@@ -1,0 +1,4 @@
+system,precision@1,precision@3,precision@5,recall@1,recall@3,recall@5,exact_match,fuzzy_match,llm_judge,hallucination_rate,conflict_accuracy,ingest_p50_ms,ingest_p95_ms,answer_p50_ms,answer_p95_ms,avg_memories_per_conv,duplicate_rate,distractor_rejection_rate
+baseline_no_memory,0.2727,0.2727,0.2727,0.2727,0.2727,0.2727,0.0,0.0494,N/A,0.2727,0.0,0.0,0.0,0.0,0.0,0.0,0.0,1.0
+basic_vector,0.6364,0.2424,0.1455,0.9091,1.0,1.0,0.3636,0.5433,N/A,0.6364,0.2,0.03,0.06,0.13,0.15,8.0,0.0,0.0
+recallfabric,0.5455,0.2424,0.1455,0.8182,1.0,1.0,0.7273,0.6716,N/A,0.2727,1.0,0.14,0.2,0.1,0.12,2.67,0.0,1.0
