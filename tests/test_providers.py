@@ -112,6 +112,30 @@ def test_provider_factory_and_settings_selection():
         get_provider(provider_type="unsupported")
 
 
+def test_hosted_provider_task_specific_models():
+    settings = Settings(
+        _env_file=None,
+        llm_provider="openai",
+        chat_provider="openai",
+        extraction_provider="openai",
+        openai_api_key=SecretStr("test-key"),
+        openai_model="gpt-default",
+        openai_chat_model="gpt-chat",
+        openai_extraction_model="gpt-extract",
+    )
+    assert get_chat_provider(settings).model == "gpt-chat"
+    assert get_extraction_provider(settings).model == "gpt-extract"
+
+    fallback = Settings(
+        _env_file=None,
+        llm_provider="anthropic",
+        anthropic_api_key=SecretStr("test-key"),
+        anthropic_model="claude-default",
+    )
+    assert get_chat_provider(fallback).model == "claude-default"
+    assert get_extraction_provider(fallback).model == "claude-default"
+
+
 def test_acceptance_switching_llm_provider_env():
     settings_ollama = Settings(_env_file=None, llm_provider="ollama")
     assert get_chat_provider(settings_ollama).name == "ollama"
@@ -400,3 +424,22 @@ def test_get_providers_endpoint():
     raw_text = res.text
     assert "sk-secret" not in raw_text
     assert "api_key" not in raw_text.lower()
+
+
+def test_providers_endpoint_handles_ollama_exclusion_in_production():
+    settings = Settings(
+        _env_file=None,
+        environment="production",
+        auth_enabled=True,
+        admin_token=SecretStr("admin-secret"),
+        db_password=SecretStr("secure-db-password"),
+        llm_provider="openai",
+        openai_api_key=SecretStr("sk-test"),
+    )
+    with TestClient(create_app(settings)) as client:
+        response = client.get("/providers")
+
+    assert response.status_code == 200
+    ollama = next(item for item in response.json()["providers"] if item["name"] == "ollama")
+    assert ollama["configured"] is False
+    assert ollama["available"] is False

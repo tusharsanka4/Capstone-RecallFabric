@@ -70,7 +70,10 @@ flowchart TD
 
 RecallFabric exposes a remote **Streamable HTTP MCP endpoint** at `/mcp` (and stdio for local environments).
 
-Add this to your **Claude Desktop** config (`claude_desktop_config.json`) or **Cursor** (`.cursor/mcp.json`):
+Add this to a compatible MCP client's configuration. The endpoint must be
+public HTTPS for hosted clients; use a RecallFabric API key as a bearer token.
+See [the universal connector guide](docs/UNIVERSAL_AI_MEMORY_CONNECTOR.md) for
+OAuth deployment requirements and client-specific limitations.
 
 ```json
 {
@@ -89,7 +92,9 @@ Add this to your **Claude Desktop** config (`claude_desktop_config.json`) or **C
 }
 ```
 
-*Your agent instantly gains access to `remember`, `recall`, `forget`, and `memory_profile` tools.*
+*Your agent gains access to `remember`, `recall`, `forget`, `list_memories`,
+`update_memory`, and provenance tools. ChatGPT and Claude live connections are
+not claimed until manually configured and tested.*
 
 ---
 
@@ -182,13 +187,12 @@ RecallFabric is engineered for multi-tenant isolation, enterprise security, and 
 
 ## 📊 Evaluation & Benchmarks
 
-RecallFabric has been benchmarked against naive vector databases and baseline zero-shot models:
-
-- **+28% Precision @ 1** (0.64 vs 0.50) over naive vector search.
-- **2.0x Conflict Resolution Accuracy** (0.84 vs 0.42) via LLM superseding.
-- **66% Memory Footprint Reduction** (2.7 vs 8.0 items/conv) through deduplication.
-- **100% Distractor Noise Filtering** preventing conversational bloat.
-- **Sub-millisecond retrieval latency** (`0.3 ms` p50).
+RecallFabric includes a reproducible local mock-provider benchmark. The latest
+three-seed run measured RecallFabric P@1 `0.67 ± 0.05`, R@1 `0.94 ± 0.05`,
+conflict accuracy `1.00`, and `2.7` memories per conversation. The supported
+scale run measured HNSW speedups of `2.3x`, `2.1x`, and `2.8x` at 1k, 10k,
+and 100k vectors respectively. These are benchmark-specific local
+measurements, not production-scale or hosted-LLM guarantees.
 
 *Read the complete [Evaluation Summary](docs/evaluation.md) or the [Full M18 Benchmark Report](evaluation/results/REPORT.md).*
 

@@ -28,19 +28,23 @@ from recallfabric.api.users import router as users_router
 from recallfabric.api.v1_tools import router as v1_tools_router
 from recallfabric.core.config import Settings
 from recallfabric.db.connection import create_database_engine
-from recallfabric.db.models import ApiKey
+from recallfabric.db.models import ApiKey, OAuthAccessToken
 from recallfabric.embeddings.service import (
     EmbeddingUnavailable,
     create_embedding_provider,
 )
-from recallfabric.mcp_server import create_mcp_server, current_mcp_user_id
+from recallfabric.mcp_server import create_mcp_server, current_mcp_scopes, current_mcp_user_id
 from recallfabric.providers import (
     ProviderBadResponse,
     ProviderTimeout,
     ProviderUnavailable,
 )
 from recallfabric.security.audit import record_audit_event
-from recallfabric.security.auth import extract_token_from_request, hash_api_key
+from recallfabric.security.auth import (
+    extract_token_from_request,
+    hash_api_key,
+    hash_oauth_token,
+)
 from recallfabric.security.rate_limiter import rate_limiter
 
 logger = logging.getLogger("recallfabric.api")
@@ -235,6 +239,47 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             )
         return JSONResponse(status_code=502, content={"detail": msg})
 
+    @app.get("/.well-known/oauth-protected-resource", include_in_schema=False)
+    async def oauth_protected_resource_metadata():
+        """Advertise MCP resource metadata for OAuth-capable hosts.
+
+        RecallFabric currently validates static bearer API keys locally. An external
+        OAuth authorization server can be advertised without placing its secrets in
+        this service; deployments must set both URLs before enabling a hosted client.
+        """
+        resource = (settings.mcp_public_url or "").rstrip("/") + "/mcp"
+        authorization_server = (
+            settings.oauth_authorization_server or settings.mcp_public_url or ""
+        ).rstrip("/")
+        authorization_servers = [authorization_server] if authorization_server else []
+        return {
+            "resource": resource or "/mcp",
+            "authorization_servers": authorization_servers,
+            "scopes_supported": settings.oauth_scopes.split(),
+            "bearer_methods_supported": ["header"],
+        }
+
+    @app.get("/.well-known/oauth-protected-resource/mcp", include_in_schema=False)
+    async def oauth_protected_resource_metadata_path():
+        return await oauth_protected_resource_metadata()
+
+    @app.get("/.well-known/oauth-authorization-server", include_in_schema=False)
+    async def oauth_authorization_server_metadata():
+        issuer = (settings.oauth_authorization_server or settings.mcp_public_url or "").rstrip("/")
+        base = issuer or ""
+        return {
+            "issuer": issuer or None,
+            "authorization_endpoint": f"{base}/auth/oauth/authorize",
+            "token_endpoint": f"{base}/auth/oauth/token",
+            "registration_endpoint": f"{base}/auth/oauth/register",
+            "revocation_endpoint": f"{base}/auth/oauth/revoke",
+            "scopes_supported": [*settings.oauth_scopes.split(), "offline_access"],
+            "response_types_supported": ["code"],
+            "grant_types_supported": ["authorization_code", "refresh_token"],
+            "token_endpoint_auth_methods_supported": ["none"],
+            "code_challenge_methods_supported": ["S256"],
+        }
+
     @app.middleware("http")
     async def limit_request_size(request: Request, call_next):
         content_length = request.headers.get("content-length")
@@ -295,9 +340,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     return JSONResponse(
                         status_code=401,
                         content={"error": {"code": "UNAUTHORIZED", "message": "Missing API key"}},
+                        headers=(
+                            {
+                                "WWW-Authenticate": (
+                                    'Bearer resource_metadata="'
+                                    f"{settings.mcp_public_url.rstrip('/')}/.well-known/"
+                                    'oauth-protected-resource"'
+                                )
+                            }
+                            if settings.mcp_public_url
+                            else None
+                        ),
                     )
 
-                key_hash = hash_api_key(raw_key)
                 if engine is None:
                     return JSONResponse(
                         status_code=503,
@@ -308,19 +363,31 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                             }
                         },
                     )
-
                 with Session(engine, expire_on_commit=False) as auth_sess:
-                    api_key = auth_sess.scalar(
-                        select(ApiKey).where(
-                            ApiKey.key_hash == key_hash, ApiKey.revoked_at.is_(None)
+                    oauth_token = auth_sess.scalar(
+                        select(OAuthAccessToken).where(
+                            OAuthAccessToken.token_hash == hash_oauth_token(raw_key),
+                            OAuthAccessToken.revoked_at.is_(None),
+                            OAuthAccessToken.expires_at > datetime.now(UTC),
                         )
                     )
-                    if api_key is None:
+                    if oauth_token is not None:
+                        resolved_uid = oauth_token.user_id
+                        resolved_scopes = frozenset(oauth_token.scope.split())
+                        auth_sess.commit()
+                    else:
+                        api_key = auth_sess.scalar(
+                            select(ApiKey).where(
+                                ApiKey.key_hash == hash_api_key(raw_key),
+                                ApiKey.revoked_at.is_(None),
+                            )
+                        )
+                    if oauth_token is None and api_key is None:
                         record_audit_event(
                             auth_sess,
                             "auth_failure",
                             ip_address=client_ip,
-                            detail={"reason": "invalid_or_revoked_key", "path": path},
+                            detail={"reason": "invalid_or_revoked_token", "path": path},
                         )
                         auth_sess.commit()
                         return JSONResponse(
@@ -328,12 +395,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                             content={
                                 "error": {
                                     "code": "UNAUTHORIZED",
-                                    "message": "Invalid or revoked API key",
+                                    "message": "Invalid or revoked API key or OAuth token",
                                 }
                             },
                         )
-
-                    if not rate_limiter.check_rate_limit(
+                    if oauth_token is None and not rate_limiter.check_rate_limit(
                         api_key.key_hash, settings.rate_limit_rps, settings.rate_limit_burst
                     ):
                         return JSONResponse(
@@ -345,25 +411,42 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                                 }
                             },
                         )
-
-                    sess_id = request.headers.get("mcp-session-id")
-                    if sess_id:
-                        sess_owner = _mcp_sessions.get(sess_id)
-                        if sess_owner and sess_owner != api_key.user_id:
+                    if oauth_token is None:
+                        api_key.last_used_at = datetime.now(UTC)
+                        auth_sess.commit()
+                        resolved_uid = api_key.user_id
+                        resolved_scopes = frozenset()
+                    else:
+                        if not rate_limiter.check_rate_limit(
+                            hash_oauth_token(raw_key),
+                            settings.rate_limit_rps,
+                            settings.rate_limit_burst,
+                        ):
                             return JSONResponse(
-                                status_code=403,
+                                status_code=429,
                                 content={
                                     "error": {
-                                        "code": "FORBIDDEN",
-                                        "message": "Session belongs to another user",
+                                        "code": "RATE_LIMIT_EXCEEDED",
+                                        "message": "Rate limit exceeded",
                                     }
                                 },
                             )
-                        _mcp_sessions[sess_id] = api_key.user_id
 
-                    api_key.last_used_at = datetime.now(UTC)
-                    auth_sess.commit()
-                    resolved_uid = api_key.user_id
+                sess_id = request.headers.get("mcp-session-id")
+                if sess_id:
+                    sess_owner = _mcp_sessions.get(sess_id)
+                    if sess_owner and sess_owner != resolved_uid:
+                        return JSONResponse(
+                            status_code=403,
+                            content={
+                                "error": {
+                                    "code": "FORBIDDEN",
+                                    "message": "Session belongs to another user",
+                                }
+                            },
+                        )
+                    _mcp_sessions[sess_id] = resolved_uid
+
             else:
                 if raw_key and engine is not None:
                     key_hash = hash_api_key(raw_key)
@@ -378,6 +461,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                         )
                 else:
                     resolved_uid = settings.mcp_user_id or "default_user"
+                    resolved_scopes = frozenset()
 
                 rate_key = raw_key or client_ip or resolved_uid
                 if not rate_limiter.check_rate_limit(
@@ -394,6 +478,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     )
 
             token = current_mcp_user_id.set(resolved_uid)
+            scope_token = current_mcp_scopes.set(resolved_scopes)
             try:
                 response = await call_next(request)
                 resp_sess_id = response.headers.get("mcp-session-id")
@@ -402,6 +487,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 return response
             finally:
                 current_mcp_user_id.reset(token)
+                current_mcp_scopes.reset(scope_token)
 
         return await call_next(request)
 

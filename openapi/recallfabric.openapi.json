@@ -1019,6 +1019,279 @@
         }
       }
     },
+    "/v1/auth/oauth/clients": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Register Oauth Client",
+        "description": "RFC 7591 public-client registration; PKCE is mandatory for every client.",
+        "operationId": "register_oauth_client_v1_auth_oauth_clients_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "type": "object",
+                "title": "Payload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Register Oauth Client V1 Auth Oauth Clients Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/auth/oauth/register": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Register Oauth Client",
+        "description": "RFC 7591 public-client registration; PKCE is mandatory for every client.",
+        "operationId": "register_oauth_client_v1_auth_oauth_register_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "type": "object",
+                "title": "Payload"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Register Oauth Client V1 Auth Oauth Register Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/auth/oauth/authorize": {
+      "get": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Authorize Oauth Client",
+        "operationId": "authorize_oauth_client_v1_auth_oauth_authorize_get",
+        "parameters": [
+          {
+            "name": "client_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Client Id"
+            }
+          },
+          {
+            "name": "redirect_uri",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Redirect Uri"
+            }
+          },
+          {
+            "name": "response_type",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Response Type"
+            }
+          },
+          {
+            "name": "code_challenge",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Code Challenge"
+            }
+          },
+          {
+            "name": "code_challenge_method",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Code Challenge Method"
+            }
+          },
+          {
+            "name": "scope",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "memory:read memory:write",
+              "title": "Scope"
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "State"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/auth/oauth/authorize/approve": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Approve Oauth Client",
+        "operationId": "approve_oauth_client_v1_auth_oauth_authorize_approve_post",
+        "requestBody": {
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_approve_oauth_client_v1_auth_oauth_authorize_approve_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/auth/oauth/token": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Exchange Oauth Token",
+        "operationId": "exchange_oauth_token_v1_auth_oauth_token_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Exchange Oauth Token V1 Auth Oauth Token Post"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/auth/oauth/revoke": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Revoke Oauth Token",
+        "operationId": "revoke_oauth_token_v1_auth_oauth_revoke_post",
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          }
+        }
+      }
+    },
     "/v1/auth/keys": {
       "post": {
         "tags": [
@@ -1731,6 +2004,30 @@
           "created_at"
         ],
         "title": "ApiKeyInfoResponse"
+      },
+      "Body_approve_oauth_client_v1_auth_oauth_authorize_approve_post": {
+        "properties": {
+          "request_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Request Id"
+          },
+          "csrf_token": {
+            "type": "string",
+            "title": "Csrf Token"
+          },
+          "api_key": {
+            "type": "string",
+            "title": "Api Key"
+          }
+        },
+        "type": "object",
+        "required": [
+          "request_id",
+          "csrf_token",
+          "api_key"
+        ],
+        "title": "Body_approve_oauth_client_v1_auth_oauth_authorize_approve_post"
       },
       "CapabilitiesResponse": {
         "properties": {

@@ -17,10 +17,22 @@ def get_default_model_for_provider(
     if ptype == "ollama":
         return settings.chat_model if task == "chat" else settings.extraction_model
     if ptype == "openai":
+        if task == "chat" and settings.openai_chat_model:
+            return settings.openai_chat_model
+        if task == "extraction" and settings.openai_extraction_model:
+            return settings.openai_extraction_model
         return settings.openai_model
     if ptype == "anthropic":
+        if task == "chat" and settings.anthropic_chat_model:
+            return settings.anthropic_chat_model
+        if task == "extraction" and settings.anthropic_extraction_model:
+            return settings.anthropic_extraction_model
         return settings.anthropic_model
     if ptype == "gemini":
+        if task == "chat" and settings.gemini_chat_model:
+            return settings.gemini_chat_model
+        if task == "extraction" and settings.gemini_extraction_model:
+            return settings.gemini_extraction_model
         return settings.gemini_model
     return settings.chat_model
 

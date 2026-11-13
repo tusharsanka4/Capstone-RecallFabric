@@ -73,12 +73,18 @@ class Settings(BaseSettings):
     openai_api_key: SecretStr = SecretStr("")
     openai_base_url: str = Field(default="https://api.openai.com/v1")
     openai_model: str = Field(default="gpt-4o-mini")
+    openai_chat_model: str | None = None
+    openai_extraction_model: str | None = None
     anthropic_api_key: SecretStr = SecretStr("")
     anthropic_base_url: str = Field(default="https://api.anthropic.com")
     anthropic_model: str = Field(default="claude-3-haiku-20240307")
+    anthropic_chat_model: str | None = None
+    anthropic_extraction_model: str | None = None
     gemini_api_key: SecretStr = SecretStr("")
     gemini_base_url: str = Field(default="https://generativelanguage.googleapis.com/v1beta")
     gemini_model: str = Field(default="gemini-1.5-flash")
+    gemini_chat_model: str | None = None
+    gemini_extraction_model: str | None = None
     auth_enabled: bool | None = None
     allow_public_signup: bool = Field(default=True)
     admin_token: SecretStr = SecretStr("")
@@ -90,6 +96,13 @@ class Settings(BaseSettings):
     mcp_host: str = Field(default="127.0.0.1")
     mcp_port: int = Field(default=8001, ge=1, le=65535)
     mcp_user_id: str | None = None
+    mcp_public_url: str | None = None
+    oauth_issuer: str | None = None
+    oauth_authorization_server: str | None = None
+    oauth_scopes: str = "memory:read memory:write"
+    oauth_access_token_minutes: int = Field(default=60, ge=1, le=1440)
+    oauth_refresh_token_days: int = Field(default=30, ge=1, le=365)
+    oauth_browser_session_minutes: int = Field(default=10, ge=1, le=60)
     proxy_allowed_upstreams: list[str] | str = Field(
         default=[
             "https://api.openai.com",

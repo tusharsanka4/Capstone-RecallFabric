@@ -42,6 +42,16 @@ logger = logging.getLogger("recallfabric.mcp")
 
 # Context variable scoping remote HTTP requests to the authenticated user ID
 current_mcp_user_id: ContextVar[str] = ContextVar("current_mcp_user_id", default="")
+current_mcp_scopes: ContextVar[frozenset[str]] = ContextVar(
+    "current_mcp_scopes", default=frozenset()
+)
+
+
+def require_mcp_scope(scope: str) -> None:
+    """Enforce OAuth scope at the tool boundary (API-key sessions retain full access)."""
+    scopes = current_mcp_scopes.get()
+    if scopes and scope not in scopes:
+        raise PermissionError(f"OAuth token lacks required scope: {scope}")
 
 
 def get_authenticated_user_id(session: Session, settings: Settings) -> str:
@@ -169,6 +179,7 @@ class RecallFabricTools:
         extract: bool,
         user_id: str | None,
     ) -> dict[str, Any]:
+        require_mcp_scope("memory:write")
         uid = self._resolve_user(session, user_id)
         self._audit(session, uid, "remember", {"extract": extract, "type": type})
         enc_key = (
@@ -380,6 +391,7 @@ class RecallFabricTools:
         type: str | None,
         user_id: str | None,
     ) -> dict[str, Any]:
+        require_mcp_scope("memory:read")
         uid = self._resolve_user(session, user_id)
         self._audit(session, uid, "recall", {"query": query, "limit": limit, "type": type})
         enc_key = (
@@ -488,6 +500,7 @@ class RecallFabricTools:
         confirm: bool,
         user_id: str | None,
     ) -> dict[str, Any]:
+        require_mcp_scope("memory:write")
         uid = self._resolve_user(session, user_id)
         self._audit(
             session, uid, "forget", {"memory_id": memory_id, "query": query, "confirm": confirm}
@@ -635,6 +648,7 @@ class RecallFabricTools:
         limit: int,
         user_id: str | None,
     ) -> list[dict[str, Any]]:
+        require_mcp_scope("memory:read")
         uid = self._resolve_user(session, user_id)
         self._audit(session, uid, "list_memories", {"type": type, "status": status, "limit": limit})
         return list_memories_service(
@@ -677,6 +691,7 @@ class RecallFabricTools:
         expected_version: int | None,
         user_id: str | None,
     ) -> dict[str, Any]:
+        require_mcp_scope("memory:write")
         uid = self._resolve_user(session, user_id)
         self._audit(
             session,
@@ -793,6 +808,7 @@ class RecallFabricTools:
         id: str,
         user_id: str | None,
     ) -> list[dict[str, Any]]:
+        require_mcp_scope("memory:read")
         uid = self._resolve_user(session, user_id)
         self._audit(session, uid, "get_memory_history", {"id": id})
         return get_memory_history_service(
@@ -801,6 +817,15 @@ class RecallFabricTools:
             user_id=uid,
             memory_id=id,
         )
+
+    def get_provenance(
+        self,
+        id: str,
+        session: Session | None = None,
+        user_id: str | None = None,
+    ) -> dict[str, Any]:
+        """Return revision and audit provenance for a memory."""
+        return {"memory_id": id, "events": self.get_memory_history(id, session, user_id)}
 
     def get_profile(
         self,
@@ -1054,6 +1079,16 @@ def create_mcp_server(
     def get_memory_history(id: str) -> list[dict[str, Any]]:
         """Retrieve the revision history and provenance audit trail for a memory."""
         return active_tools.get_memory_history(id=id)
+
+    @server.tool(
+        description=(
+            "Retrieve provenance for a memory, including its creation, updates, "
+            "supersession, access, and deletion events. Do NOT pass user_id."
+        )
+    )
+    def get_provenance(id: str) -> dict[str, Any]:
+        """Retrieve revision and audit provenance for a memory."""
+        return active_tools.get_provenance(id=id)
 
     @server.tool(
         description=(

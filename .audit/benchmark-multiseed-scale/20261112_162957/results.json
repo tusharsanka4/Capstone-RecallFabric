@@ -1,0 +1,133 @@
+{
+  "timestamp": "20261112_162957",
+  "config": {
+    "dataset_path": "evaluation/data/dataset.jsonl",
+    "results_dir": ".audit/benchmark-multiseed-scale",
+    "systems": [
+      "no_memory",
+      "basic_vector",
+      "recallfabric"
+    ],
+    "k": 5,
+    "provider": {
+      "name": "mock",
+      "model": "mock-model",
+      "temperature": 0.1,
+      "timeout": 30.0
+    },
+    "judge_provider": null,
+    "embedder": {
+      "type": "deterministic",
+      "model": "test-retrieval-model"
+    },
+    "metrics": {
+      "exact_match": true,
+      "fuzzy_match": true,
+      "llm_judge": false,
+      "retrieval_k": [
+        1,
+        3,
+        5
+      ],
+      "hallucination_check": true,
+      "conflict_accuracy": true,
+      "latency_tracking": true,
+      "memory_efficiency": true
+    },
+    "limit_conversations": null,
+    "user_id_prefix": "eval_"
+  },
+  "dataset_summary": {
+    "conversations": 50,
+    "total_questions": 183
+  },
+  "systems": {
+    "baseline_no_memory": {
+      "system_name": "baseline_no_memory",
+      "total_conversations": 50,
+      "total_questions": 183,
+      "precision_at_k": {
+        "1": 0.2732,
+        "3": 0.2732,
+        "5": 0.2732
+      },
+      "recall_at_k": {
+        "1": 0.2732,
+        "3": 0.2732,
+        "5": 0.2732
+      },
+      "exact_match": 0.0,
+      "fuzzy_match": 0.0532,
+      "llm_judge": null,
+      "hallucination_rate": 0.2732,
+      "conflict_accuracy": 0.0,
+      "ingest_p50_ms": 0.0,
+      "ingest_p95_ms": 0.0,
+      "answer_p50_ms": 0.0,
+      "answer_p95_ms": 0.01,
+      "avg_memories_per_conv": 0.0,
+      "duplicate_rate": 0.0,
+      "distractor_rejection_rate": 1.0
+    },
+    "basic_vector": {
+      "system_name": "basic_vector",
+      "total_conversations": 50,
+      "total_questions": 183,
+      "precision_at_k": {
+        "1": 0.5246,
+        "3": 0.2423,
+        "5": 0.1454
+      },
+      "recall_at_k": {
+        "1": 0.7978,
+        "3": 1.0,
+        "5": 1.0
+      },
+      "exact_match": 0.4153,
+      "fuzzy_match": 0.5191,
+      "llm_judge": null,
+      "hallucination_rate": 0.5683,
+      "conflict_accuracy": 0.3494,
+      "ingest_p50_ms": 0.05,
+      "ingest_p95_ms": 0.08,
+      "answer_p50_ms": 0.23,
+      "answer_p95_ms": 0.33,
+      "avg_memories_per_conv": 7.98,
+      "duplicate_rate": 0.0175,
+      "distractor_rejection_rate": 0.0
+    },
+    "recallfabric": {
+      "system_name": "recallfabric",
+      "total_conversations": 50,
+      "total_questions": 183,
+      "precision_at_k": {
+        "1": 0.6011,
+        "3": 0.2295,
+        "5": 0.1377
+      },
+      "recall_at_k": {
+        "1": 0.8743,
+        "3": 0.9617,
+        "5": 0.9617
+      },
+      "exact_match": 0.6503,
+      "fuzzy_match": 0.5832,
+      "llm_judge": null,
+      "hallucination_rate": 0.3005,
+      "conflict_accuracy": 0.8675,
+      "ingest_p50_ms": 0.16,
+      "ingest_p95_ms": 0.31,
+      "answer_p50_ms": 0.15,
+      "answer_p95_ms": 0.22,
+      "avg_memories_per_conv": 2.66,
+      "duplicate_rate": 0.0526,
+      "distractor_rejection_rate": 1.0
+    }
+  },
+  "cross_model_consistency": {
+    "baseline_no_memory_vs_basic_vector": 0.2732,
+    "baseline_no_memory_vs_recallfabric": 0.2951,
+    "basic_vector_vs_recallfabric": 0.9781,
+    "mean_agreement": 0.5155
+  }
+}

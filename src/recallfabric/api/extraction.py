@@ -167,7 +167,13 @@ def extract_memories(
         if mem_type not in {"preference", "goal", "skill", "profile", "fact", "other"}:
             mem_type = "fact"
 
-        is_valid, reject_reason = filter_candidate(content, importance, confidence, settings)
+        is_valid, reject_reason = filter_candidate(
+            content,
+            importance,
+            confidence,
+            settings,
+            source_text=payload.text,
+        )
         if not is_valid:
             rejected_candidates.append(
                 RejectedCandidate(

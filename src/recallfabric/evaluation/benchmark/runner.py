@@ -4,6 +4,7 @@ ablations, scale tests, and report generation.
 
 import json
 import math
+import os
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -163,14 +164,15 @@ class BenchmarkRunner:
         providers_to_test = [
             ("Mock Provider", MockEvaluationProvider(name="mock", model="mock-eval-v1"))
         ]
-        try:
-            from recallfabric.providers import get_provider
+        if os.getenv("RECALLFABRIC_RUN_LIVE_PROVIDER_BENCHMARK") == "1":
+            try:
+                from recallfabric.providers import get_provider
 
-            ollama_p = get_provider("ollama", model="llama3.2")
-            if ollama_p.is_available():
-                providers_to_test.append(("Ollama (llama3.2)", ollama_p))
-        except Exception:
-            pass
+                ollama_p = get_provider("ollama")
+                if ollama_p.is_available():
+                    providers_to_test.append((f"Ollama ({ollama_p.model})", ollama_p))
+            except Exception:
+                pass
 
         for p_label, p_inst in providers_to_test:
             p_runner = EvaluationRunner(config=cfg, llm=p_inst, embedder=base_embedder)

@@ -2,6 +2,7 @@ import hashlib
 import hmac
 import secrets
 from datetime import UTC, datetime
+from hashlib import sha256
 from typing import Annotated
 
 from fastapi import Depends, HTTPException, Request
@@ -26,6 +27,15 @@ def generate_api_key() -> tuple[str, str]:
 
 def hash_api_key(raw_key: str) -> str:
     return hashlib.sha256(raw_key.strip().encode("utf-8")).hexdigest()
+
+
+def hash_oauth_token(token: str) -> str:
+    return sha256(token.encode("utf-8")).hexdigest()
+
+
+def generate_oauth_token(prefix: str) -> tuple[str, str]:
+    token = f"{prefix}_{secrets.token_urlsafe(40)}"
+    return token, hash_oauth_token(token)
 
 
 def extract_token_from_request(

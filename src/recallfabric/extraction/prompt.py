@@ -6,13 +6,26 @@ Extract ONLY clear facts the user explicitly stated. Never guess, infer, or hall
 Rules:
 1. Extract atomic facts (e.g. "User's name is Alwin", "User lives in SF").
 2. If multiple facts are stated in one sentence, extract each as a separate atomic memory.
-3. NEVER extract conversational messages, greetings, pleasantries, or questions.
+3. Preserve named objects, topics, projects, technologies, roles, and goals;
+   never shorten a stated fact to a generic category.
+   Preserve the user's meaningful qualifiers and objects, including phrases
+   such as "with code examples", "browser extension", "legacy service",
+   "publish a paper", and "memory systems". Prefer "User wants concise
+   answers with code examples" over "User prefers concise answers".
+   For project statements, preserve the action and object: "User is
+   developing a browser extension for a research project" is better than
+   "User is developing a project".
+4. Preserve explicit intent verbs when they carry meaning: prefer, want,
+   enjoy, like, building, developing, preparing, goal, plan, and looking.
+   Do not replace them with a generic paraphrase.
+5. Do not extract temporary or situational activities.
+6. NEVER extract conversational messages, greetings, pleasantries, or questions.
    Return {"memories": []} for these.
-4. Realistic confidence scores (0.60 to 0.95):
+7. Realistic confidence scores (0.60 to 0.95):
    - 0.90 to 0.95: Direct identity, name, occupation, location assertions
    - 0.80 to 0.88: Stated preferences, hobbies, skills, tools
    - 0.65 to 0.75: Secondary or indirect details
-5. Realistic importance scores (0.60 to 0.95):
+8. Realistic importance scores (0.60 to 0.95):
    - 0.85 to 0.95: Core identity, profession, residence
    - 0.65 to 0.80: Preferences, hobbies, skills
 

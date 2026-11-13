@@ -13,6 +13,17 @@ def list_providers(request: Request):
     items: list[ProviderInfo] = []
 
     for name in names:
+        if name == "ollama" and settings.environment == "production":
+            items.append(
+                ProviderInfo(
+                    name=name,
+                    model=settings.chat_model,
+                    configured=False,
+                    available=False,
+                    is_default=(settings.llm_provider == name),
+                )
+            )
+            continue
         prov = get_provider(provider_type=name, settings=settings)
         configured = True
         if name == "openai":

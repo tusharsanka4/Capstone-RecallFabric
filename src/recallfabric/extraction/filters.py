@@ -60,7 +60,6 @@ _TEMPORARY_PATTERNS = [
     "right now",
     "at the moment",
     "at this moment",
-    "currently",
     "for now",
     "in a meeting",
     "on a call",
@@ -102,6 +101,16 @@ _TEMPORARY_PATTERNS = [
 ]
 
 _QUESTION_RE = re.compile(r"\?\s*$")
+_TRANSIENT_ACTIVITY_PATTERNS = (
+    "waiting for",
+    "commuting",
+    "heading home",
+    "driving",
+    "eating",
+    "having lunch",
+    "having dinner",
+    "having breakfast",
+)
 
 
 def filter_candidate(
@@ -109,6 +118,7 @@ def filter_candidate(
     importance: float,
     confidence: float,
     settings: Settings,
+    source_text: str | None = None,
 ) -> tuple[bool, str | None]:
     stripped = content.strip().strip('"').strip("'").strip()
     if not stripped:
@@ -158,6 +168,25 @@ def filter_candidate(
     for pattern in _TEMPORARY_PATTERNS:
         if re.search(rf"\b{re.escape(pattern)}\b", lower):
             return False, "Content is a temporary or situational statement"
+
+    if source_text:
+        source_lower = source_text.lower()
+        has_temporal_context = any(
+            re.search(rf"\b{re.escape(pattern)}\b", source_lower)
+            for pattern in ("currently", "right now", "today", "tonight", "this evening")
+        )
+        if has_temporal_context and any(
+            re.search(rf"\b{re.escape(pattern)}\b", lower)
+            for pattern in _TRANSIENT_ACTIVITY_PATTERNS
+        ):
+            return False, "Source describes a temporary or situational activity"
+    elif any(
+        re.search(rf"\b{re.escape(pattern)}\b", lower)
+        for pattern in ("currently", "right now", "today", "tonight", "this evening")
+    ) and any(
+        re.search(rf"\b{re.escape(pattern)}\b", lower) for pattern in _TRANSIENT_ACTIVITY_PATTERNS
+    ):
+        return False, "Content is a temporary or situational statement"
 
     if not (
         stripped.startswith("User ")
