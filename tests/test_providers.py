@@ -112,7 +112,9 @@ def test_provider_factory_and_settings_selection():
         get_provider(provider_type="unsupported")
 
 
-def test_hosted_provider_task_specific_models():
+def test_hosted_provider_task_specific_models(monkeypatch):
+    monkeypatch.delenv("RECALLFABRIC_CHAT_PROVIDER", raising=False)
+    monkeypatch.delenv("RECALLFABRIC_EXTRACTION_PROVIDER", raising=False)
     settings = Settings(
         _env_file=None,
         llm_provider="openai",
@@ -136,7 +138,9 @@ def test_hosted_provider_task_specific_models():
     assert get_extraction_provider(fallback).model == "claude-default"
 
 
-def test_acceptance_switching_llm_provider_env():
+def test_acceptance_switching_llm_provider_env(monkeypatch):
+    monkeypatch.delenv("RECALLFABRIC_CHAT_PROVIDER", raising=False)
+    monkeypatch.delenv("RECALLFABRIC_EXTRACTION_PROVIDER", raising=False)
     settings_ollama = Settings(_env_file=None, llm_provider="ollama")
     assert get_chat_provider(settings_ollama).name == "ollama"
 

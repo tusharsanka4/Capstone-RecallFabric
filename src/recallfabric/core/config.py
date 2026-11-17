@@ -45,6 +45,7 @@ class Settings(BaseSettings):
     run_migrations: bool = Field(default=False)
     llm_base_url: str = Field(default="http://127.0.0.1:11434/v1", min_length=1)
     extraction_model: str = Field(default="qwen2.5:0.5b", min_length=1)
+    confirm_assistant_recommendations: bool = True
     llm_api_key: SecretStr = SecretStr("ollama")
     llm_timeout: float = Field(default=30.0, ge=1.0, le=600.0)
     extraction_temperature: float = Field(default=0.0, ge=0.0, le=2.0)

@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://recallfabric.local/schemas/memory-accuracy-scenario.json",
+  "title": "RecallFabric memory accuracy scenario",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "split", "category", "messages", "gold", "retrieval"],
+  "properties": {
+    "id": {"type": "string", "pattern": "^ma-[a-z0-9-]+-[0-9]{3}$"},
+    "split": {"enum": ["development", "evaluation"]},
+    "category": {"type": "string"},
+    "messages": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["role", "content"],
+        "properties": {
+          "role": {"enum": ["user", "assistant"]},
+          "content": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "gold": {
+      "type": "object", "additionalProperties": false,
+      "required": ["memories", "negative_memories", "acceptance"],
+      "properties": {
+        "memories": {"type": "array", "items": {"$ref": "#/$defs/memory"}},
+        "negative_memories": {"type": "array", "items": {"$ref": "#/$defs/negative"}},
+        "acceptance": {
+          "type": "object", "additionalProperties": false,
+          "required": ["required", "present", "proposal_accepted", "evidence"],
+          "properties": {
+            "required": {"type": "boolean"},
+            "present": {"type": "boolean"},
+            "proposal_accepted": {"enum": ["yes", "no", "partial", "modified", "ambiguous", "not_applicable"]},
+            "evidence": {"type": "array", "items": {"type": "string"}}
+          }
+        }
+      }
+    },
+    "retrieval": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["id", "query", "target_memory_ids"],
+        "properties": {
+          "id": {"type": "string", "minLength": 1},
+          "query": {"type": "string", "minLength": 1},
+          "target_memory_ids": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    }
+  },
+  "$defs": {
+    "memory": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "persist", "subject", "value", "context", "type", "status", "provenance", "evidence"],
+      "properties": {
+        "id": {"type": "string", "minLength": 1},
+        "persist": {"const": true},
+        "subject": {"type": "string", "minLength": 1},
+        "value": {"type": "string", "minLength": 1},
+        "context": {"type": "string", "minLength": 1},
+        "type": {"enum": ["preference", "goal", "skill", "profile", "fact", "other"]},
+        "status": {"enum": ["active", "superseded"]},
+        "supersedes": {"type": ["string", "null"]},
+        "provenance": {"enum": ["user", "user_confirmed_assistant_recommendation"]},
+        "evidence": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}}
+      }
+    },
+    "negative": {
+      "type": "object", "additionalProperties": false,
+      "required": ["value", "reason"],
+      "properties": {
+        "value": {"type": "string", "minLength": 1},
+        "reason": {"type": "string", "minLength": 1}
+      }
+    }
+  }
+}
+

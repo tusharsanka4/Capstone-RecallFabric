@@ -293,6 +293,7 @@ def test_profile_endpoint(client):
 
 
 # 8. Consistent Error Envelope on /v1
+@skip_without_db
 def test_v1_error_format_vs_unversioned(client):
     # /v1 validation error returns {error: {code, message}}
     resp_v1_val = client.post("/v1/remember", json={})

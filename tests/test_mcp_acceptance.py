@@ -20,7 +20,11 @@ from sqlalchemy.orm import Session
 from recallfabric.core.config import Settings
 from recallfabric.db.connection import create_database_engine
 from recallfabric.db.models import ApiKey, Memory, OAuthAccessToken
-from recallfabric.embeddings.service import EmbeddingResult, LocalEmbeddingProvider
+from recallfabric.embeddings.service import (
+    EmbeddingResult,
+    LocalEmbeddingProvider,
+    get_embedding_provider,
+)
 from recallfabric.main import create_app
 from recallfabric.security.auth import generate_api_key, hash_oauth_token
 
@@ -190,6 +194,59 @@ async def test_authenticated_lifecycle_and_isolation(database):
             assert (await call(alice, "list_memories", {}))["result"] == []
     with engine.connect() as connection:
         assert connection.execute(select(Memory.id)).all() == []
+
+
+@pytest.mark.anyio
+async def test_rest_and_mcp_share_memory_revisions(database):
+    app, _, keys = database
+    app.dependency_overrides[get_embedding_provider] = lambda: Embedder()
+    async with app.state.mcp_server.session_manager.run():
+        async with client(app, keys["alice"]) as mcp:
+            stored = await call(mcp, "remember", {"content": "User likes Python"})
+            memory_id = stored["memory"]["id"]
+            async with httpx.AsyncClient(
+                transport=httpx.ASGITransport(app=app),
+                base_url="http://testserver",
+                headers={"x-api-key": keys["alice"]},
+            ) as rest:
+                path = f"/memories/{memory_id}"
+                current = await rest.get(path, params={"user_id": "alice"})
+                assert current.status_code == 200
+                assert current.json()["version"] == 1
+                changed = await rest.put(
+                    path,
+                    params={"user_id": "alice"},
+                    json={
+                        "content": "User likes Rust",
+                        "type": "fact",
+                        "importance": 0.5,
+                        "confidence": 1.0,
+                        "source": "rest_test",
+                        "expected_version": 1,
+                    },
+                )
+                assert changed.status_code == 200, changed.text
+                assert changed.json()["version"] == 2
+                assert (
+                    await mcp.call_tool(
+                        "update_memory",
+                        {"id": memory_id, "content": "stale", "expected_version": 1},
+                    )
+                ).is_error
+                updated = await call(
+                    mcp,
+                    "update_memory",
+                    {"id": memory_id, "content": "User likes Go", "expected_version": 2},
+                )
+                assert updated["version"] == 3
+                latest = await rest.get(path, params={"user_id": "alice"})
+                assert latest.json()["content"] == "User likes Go"
+                assert latest.json()["version"] == 3
+                provenance = await rest.get(path + "/provenance", params={"user_id": "alice"})
+                assert provenance.status_code == 200
+                assert len((await call(mcp, "get_provenance", {"id": memory_id}))["events"]) == len(
+                    provenance.json()["events"]
+                )
 
 
 @pytest.mark.anyio

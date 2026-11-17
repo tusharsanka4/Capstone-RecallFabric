@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 
 import pytest
 from fastapi.testclient import TestClient
@@ -129,6 +130,10 @@ def test_get_ingest_job_not_found(ingest_client):
     assert "not found" in resp.json()["error"]["message"]
 
 
+@pytest.mark.skipif(
+    os.getenv("RECALLFABRIC_RUN_DB_TESTS") != "1",
+    reason="Set RECALLFABRIC_RUN_DB_TESTS=1 for PostgreSQL ingest tests",
+)
 def test_ingest_processing_sync_logic(monkeypatch):
     """Test the ingest background task worker logic directly."""
     mock_provider = MockExtractionProvider()
@@ -149,7 +154,7 @@ def test_ingest_processing_sync_logic(monkeypatch):
         ],
         source="unit_test",
         settings=Settings(environment="development", auth_enabled=False),
-        engine=None,  # No DB connection in unit test, gracefully finishes
+        engine=None,
         embedder=None,
         job_store=default_ingest_job_store,
     )

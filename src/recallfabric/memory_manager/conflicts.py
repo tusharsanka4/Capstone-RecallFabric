@@ -123,6 +123,27 @@ def resolve_conflict_or_store(
     llm_model: str,
     llm_timeout: float = 10.0,
 ) -> tuple[Memory, Literal["created", "consolidated"], UUID | None, dict[str, Any] | None]:
+    decision_slot = (metadata or {}).get("decision_slot")
+    if (metadata or {}).get(
+        "origin"
+    ) == "user_confirmed_assistant_recommendation" and decision_slot:
+        existing_decision = session.execute(
+            select(Memory)
+            .where(
+                Memory.user_id == user_id,
+                Memory.type == memory_type,
+                Memory.status == "active",
+                Memory.attributes["origin"].as_string()
+                == "user_confirmed_assistant_recommendation",
+                Memory.attributes["decision_slot"].as_string() == decision_slot,
+            )
+            .order_by(Memory.created_at.desc())
+            .limit(1)
+        ).scalar_one_or_none()
+        if existing_decision is not None and decrypt_content(existing_decision.content) == content:
+            return existing_decision, "consolidated", existing_decision.id, {"duplicate": True}
+    else:
+        existing_decision = None
     candidates = find_conflict_candidates(
         session=session,
         user_id=user_id,
@@ -133,6 +154,10 @@ def resolve_conflict_or_store(
         min_similarity=min_similarity,
         max_similarity=max_similarity,
     )
+    if existing_decision is not None:
+        candidates = [(existing_decision, 1.0)] + [
+            pair for pair in candidates if pair[0].id != existing_decision.id
+        ]
 
     if not candidates:
         new_meta = dict(metadata or {})
@@ -206,14 +231,17 @@ def resolve_conflict_or_store(
     for candidate, _ in candidates:
         try:
             decrypted_candidate_content = decrypt_content(candidate.content)
-            classification = classify_conflict(
-                llm=llm,
-                model=llm_model,
-                existing_content=decrypted_candidate_content,
-                new_content=content,
-                memory_type=memory_type,
-                timeout=llm_timeout,
-            )
+            if candidate is existing_decision:
+                classification = "update"
+            else:
+                classification = classify_conflict(
+                    llm=llm,
+                    model=llm_model,
+                    existing_content=decrypted_candidate_content,
+                    new_content=content,
+                    memory_type=memory_type,
+                    timeout=llm_timeout,
+                )
         except Exception:
             new_meta = dict(metadata or {})
             new_meta["conflict_check"] = "skipped"

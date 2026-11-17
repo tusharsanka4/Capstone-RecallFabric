@@ -2,8 +2,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 
-from recallfabric.api.extraction import MemoryExtractRequest
-from recallfabric.api.extraction import extract_memories as run_extraction
+from recallfabric.api.extraction import MemoryExtractRequest, extract_chat_memories
 from recallfabric.api.memories import Database, Embedder, retrieve_memories
 from recallfabric.context.builder import assemble_system_prompt, build_context_block
 from recallfabric.db.models import ApiKey
@@ -119,13 +118,14 @@ def chat_endpoint(
             text=payload.message,
             source=source,
         )
-        extract_res = run_extraction(
+        extract_res = extract_chat_memories(
             payload=extract_req,
             session=session,
             embedder=embedder,
             client=client,
             request=request,
             api_key=api_key,
+            conversation_history=payload.history,
         )
         extracted_memories = extract_res.extracted
 

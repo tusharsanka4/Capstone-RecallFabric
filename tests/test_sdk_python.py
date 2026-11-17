@@ -10,6 +10,7 @@ Covers:
 from __future__ import annotations
 
 import json
+import os
 from uuid import uuid4
 
 import httpx
@@ -339,6 +340,10 @@ def test_framework_adapters():
 
 
 # 10. Integration Test with ASGI FastAPI Application
+@pytest.mark.skipif(
+    os.getenv("RECALLFABRIC_RUN_DB_TESTS") != "1",
+    reason="Set RECALLFABRIC_RUN_DB_TESTS=1 for PostgreSQL SDK tests",
+)
 def test_integration_against_app_instance():
     """Acceptance test: 3 lines of code store and recall a memory."""
     from fastapi.testclient import TestClient
@@ -374,6 +379,10 @@ def test_integration_against_app_instance():
 
 
 @pytest.mark.anyio
+@pytest.mark.skipif(
+    os.getenv("RECALLFABRIC_RUN_DB_TESTS") != "1",
+    reason="Set RECALLFABRIC_RUN_DB_TESTS=1 for PostgreSQL SDK tests",
+)
 async def test_async_integration_against_app_instance():
     from fastapi.testclient import TestClient
 

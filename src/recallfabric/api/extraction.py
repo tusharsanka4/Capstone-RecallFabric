@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from recallfabric.api.memories import Database, Embedder
 from recallfabric.db.models import ApiKey, Memory
+from recallfabric.extraction.decisions import resolve_confirmed_decisions, user_fact_remainder
 from recallfabric.extraction.filters import filter_candidate
 from recallfabric.extraction.prompt import SYSTEM_PROMPT
 from recallfabric.memory_manager.conflicts import resolve_conflict_or_store
@@ -23,6 +24,7 @@ from recallfabric.providers import (
     ProviderUnavailable,
     get_extraction_provider,
 )
+from recallfabric.schemas.chat import ChatMessage
 from recallfabric.schemas.memory import MemoryCreate, MemoryRead, NonemptyText
 from recallfabric.security.auth import get_current_api_key, verify_user_access
 from recallfabric.security.encryption import decrypt_content, encrypt_content
@@ -93,6 +95,18 @@ def extract_memories(
     request: Request,
     api_key: ApiKeyDep = None,
 ):
+    return extract_chat_memories(payload, session, embedder, client, request, api_key)
+
+
+def extract_chat_memories(
+    payload: MemoryExtractRequest,
+    session: Database,
+    embedder: Embedder,
+    client: LLMClient,
+    request: Request,
+    api_key: ApiKeyDep = None,
+    conversation_history: list[ChatMessage] | None = None,
+):
     if not payload.text.strip():
         raise HTTPException(status_code=422, detail="Text cannot be empty")
 
@@ -104,7 +118,106 @@ def extract_memories(
     else:
         provider = OllamaProvider(client=client, model=settings.extraction_model)
 
-    user_message = f'Extract all atomic facts from this user message:\n"""\n{payload.text}\n"""'
+    decisions = (
+        resolve_confirmed_decisions(provider, conversation_history, payload.text)
+        if settings.confirm_assistant_recommendations
+        else []
+    )
+    remaining_text = user_fact_remainder(payload.text, conversation_history, decisions)
+    if not remaining_text.strip(" .,!;:\n\t"):
+        memories_data = []
+    else:
+        user_message = (
+            f'Extract all atomic facts from this user message:\n"""\n{remaining_text}\n"""'
+        )
+        memories_data = _extract_user_fact_data(provider, user_message, settings)
+    memories_data = decisions + memories_data
+
+    valid_candidates = []
+    rejected_candidates = []
+
+    for item in memories_data:
+        if not isinstance(item, dict):
+            continue
+        content = str(item.get("content", "")).strip().strip('"').strip("'").strip()
+        try:
+            importance = float(item.get("importance", 0.0))
+            confidence = float(item.get("confidence", 0.0))
+        except (ValueError, TypeError):
+            rejected_candidates.append(
+                RejectedCandidate(content=content, reason="Invalid importance or confidence score")
+            )
+            continue
+
+        mem_type = str(item.get("type", "fact")).lower().strip()
+        if mem_type not in {"preference", "goal", "skill", "profile", "fact", "other"}:
+            mem_type = "fact"
+
+        is_valid, reject_reason = filter_candidate(
+            content, importance, confidence, settings, source_text=payload.text
+        )
+        if not is_valid:
+            rejected_candidates.append(
+                RejectedCandidate(
+                    content=content,
+                    reason=reject_reason or "Quality filter rejected",
+                    type=mem_type,
+                    importance=importance,
+                    confidence=confidence,
+                )
+            )
+            continue
+
+        reason = str(item.get("creation_reason") or "").strip() or "Explicitly stated by user"
+        meta = dict(item.get("metadata") or {})
+        max_snippet = settings.extraction_max_snippet_chars
+        snippet = payload.text[:max_snippet]
+        start_char = None
+        end_char = None
+        idx = payload.text.lower().find(content.lower())
+        if idx != -1:
+            start_char = idx
+            end_char = idx + len(content)
+        meta["source_id"] = payload.source
+        meta["source_reference"] = {
+            "source_id": payload.source,
+            "snippet": snippet,
+            "start_char": start_char,
+            "end_char": end_char,
+        }
+        meta["snippet"] = snippet
+        if start_char is not None:
+            meta["character_offsets"] = [start_char, end_char]
+
+        valid_candidates.append(
+            MemoryCreate(
+                user_id=payload.user_id,
+                content=content,
+                type=mem_type,
+                importance=importance,
+                confidence=confidence,
+                source=payload.source,
+                creation_reason=reason,
+                metadata=meta,
+            )
+        )
+
+    return _persist_extraction(
+        payload,
+        session,
+        embedder,
+        provider,
+        settings,
+        enc_key,
+        memories_data,
+        valid_candidates,
+        rejected_candidates,
+    )
+
+
+def _extract_user_fact_data(
+    provider: Any, user_message: str, settings: Any
+) -> list[dict[str, Any]]:
     try:
         result_content = provider.chat(
             messages=[
@@ -142,83 +255,20 @@ def extract_memories(
     if "memories" not in data or not isinstance(data["memories"], list):
         raise HTTPException(status_code=502, detail="LLM returned invalid JSON")
 
-    memories_data = data["memories"]
+    return data["memories"]
 
-    valid_candidates = []
-    rejected_candidates = []
 
-    for item in memories_data:
-        if not isinstance(item, dict):
-            continue
-        content = str(item.get("content", "")).strip().strip('"').strip("'").strip()
-        try:
-            importance = float(item.get("importance", 0.0))
-            confidence = float(item.get("confidence", 0.0))
-        except (ValueError, TypeError):
-            rejected_candidates.append(
-                RejectedCandidate(
-                    content=content,
-                    reason="Invalid importance or confidence score",
-                )
-            )
-            continue
-
-        mem_type = str(item.get("type", "fact")).lower().strip()
-        if mem_type not in {"preference", "goal", "skill", "profile", "fact", "other"}:
-            mem_type = "fact"
-
-        is_valid, reject_reason = filter_candidate(
-            content,
-            importance,
-            confidence,
-            settings,
-            source_text=payload.text,
-        )
-        if not is_valid:
-            rejected_candidates.append(
-                RejectedCandidate(
-                    content=content,
-                    reason=reject_reason or "Quality filter rejected",
-                    type=mem_type,
-                    importance=importance,
-                    confidence=confidence,
-                )
-            )
-            continue
-
-        reason = str(item.get("creation_reason") or "").strip() or "Explicitly stated by user"
-
-        meta = dict(item.get("metadata") or {})
-        max_snippet = settings.extraction_max_snippet_chars
-        snippet = payload.text[:max_snippet]
-        start_char = None
-        end_char = None
-        idx = payload.text.lower().find(content.lower())
-        if idx != -1:
-            start_char = idx
-            end_char = idx + len(content)
-        meta["source_id"] = payload.source
-        meta["source_reference"] = {
-            "source_id": payload.source,
-            "snippet": snippet,
-            "start_char": start_char,
-            "end_char": end_char,
-        }
-        meta["snippet"] = snippet
-        if start_char is not None:
-            meta["character_offsets"] = [start_char, end_char]
-
-        mem_create = MemoryCreate(
-            user_id=payload.user_id,
-            content=content,
-            type=mem_type,
-            importance=importance,
-            confidence=confidence,
-            source=payload.source,
-            creation_reason=reason,
-            metadata=meta,
-        )
-        valid_candidates.append(mem_create)
+def _persist_extraction(
+    payload,
+    session,
+    embedder,
+    provider,
+    settings,
+    enc_key,
+    memories_data,
+    valid_candidates,
+    rejected_candidates,
+):
 
     if payload.dry_run:
         return ExtractionResponse(
@@ -237,15 +287,20 @@ def extract_memories(
                 acquire_dedupe_lock(session, payload.user_id)
             for mem_create, embedding in candidates_with_embeddings:
                 if payload.deduplicate:
-                    matched, _ = find_duplicate_memory(
-                        session=session,
-                        user_id=mem_create.user_id,
-                        memory_type=mem_create.type,
-                        embedding_vector=embedding.vector,
-                        embedding_model=embedding.model,
-                        embedding_dimensions=embedding.dimensions,
-                        threshold=settings.dedupe_threshold,
-                    )
+                    matched = None
+                    if (
+                        mem_create.metadata.get("origin")
+                        != "user_confirmed_assistant_recommendation"
+                    ):
+                        matched, _ = find_duplicate_memory(
+                            session=session,
+                            user_id=mem_create.user_id,
+                            memory_type=mem_create.type,
+                            embedding_vector=embedding.vector,
+                            embedding_model=embedding.model,
+                            embedding_dimensions=embedding.dimensions,
+                            threshold=settings.dedupe_threshold,
+                        )
                     if matched is not None:
                         memory, action, matched_id = deduplicate_and_store(
                             session=session,

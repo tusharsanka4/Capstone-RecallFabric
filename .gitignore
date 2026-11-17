@@ -20,3 +20,4 @@ build/
 ollama.zip
 evaluation/results/*.json
 evaluation/results/20*
+benchmarks/memory_accuracy/results/
