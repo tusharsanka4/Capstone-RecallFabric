@@ -658,9 +658,21 @@ with tab_chat:
             history = [
                 {"role": m["role"], "content": m["content"]} for m in st.session_state.messages[:-1]
             ]
-            reply, retrieved_items, new_mems = chat_with_service(
-                API_URL, USER_ID, prompt, history, extract=True
-            )
+            try:
+                reply, retrieved_items, new_mems = chat_with_service(
+                    API_URL, USER_ID, prompt, history, extract=True
+                )
+            except DashboardClientError as exc:
+                ph.empty()
+                st.session_state.messages.pop()
+                if exc.status_code == 503 and "Database unavailable" in exc.detail:
+                    st.error(
+                        "The memory database is unavailable. Start Docker Desktop and "
+                        "the database container, then send your message again."
+                    )
+                else:
+                    st.error(f"Chat failed: {exc.detail}")
+                st.stop()
             ph.empty()
 
             st.markdown(reply)

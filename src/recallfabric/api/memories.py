@@ -1,3 +1,4 @@
+
 """User-scoped memory CRUD and basic text search."""
 
 from datetime import UTC, datetime
@@ -36,6 +37,7 @@ from recallfabric.schemas.memory import (
 from recallfabric.schemas.provenance import MemoryProvenanceResponse
 from recallfabric.security.auth import get_current_api_key, verify_user_access
 from recallfabric.security.encryption import decrypt_content, encrypt_content
+from recallfabric.services.locking import MemoryNotFound, lock_memory_revision
 
 router = APIRouter(prefix="/memories", tags=["memories"])
 Database = Annotated[Session, Depends(get_session)]
@@ -59,14 +61,10 @@ def current_memory(session: Session, user_id: str, memory_id: UUID) -> Memory:
 
 
 def lock_memory(session: Session, user_id: str, memory_id: UUID):
-    # All writers lock the stable first revision, including after it is superseded.
-    root = session.scalar(
-        select(Memory)
-        .where(Memory.id == memory_id, Memory.user_id == user_id, Memory.version == 1)
-        .with_for_update()
-    )
-    if root is None:
-        raise HTTPException(404, "Memory not found")
+    try:
+        lock_memory_revision(session, user_id, memory_id)
+    except MemoryNotFound:
+        raise HTTPException(404, "Memory not found") from None
 
 
 def to_read_schema(memory: Memory, encryption_key: str | None = None) -> MemoryRead:

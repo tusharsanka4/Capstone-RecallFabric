@@ -135,6 +135,7 @@ async def test_in_memory_mcp_client_all_tools():
                             "id": target_id,
                             "content": "User prefers FastAPI, PyDantic v2, and async SQLAlchemy",
                             "importance": 0.95,
+                            "expected_version": stored_memories[0]["version"],
                         },
                     )
                     assert not upd_res.is_error
@@ -182,7 +183,14 @@ async def test_in_memory_mcp_client_all_tools():
                     assert "pending_confirmation" in f_pending_text
 
                     # 12. Tool: forget (confirmed by ID)
-                    f_confirmed = await session.call_tool("forget", {"memory_id": target_id})
+                    f_confirmed = await session.call_tool(
+                        "forget",
+                        {
+                            "memory_id": target_id,
+                            "expected_version": stored_memories[0]["version"] + 1,
+                            "confirm": True,
+                        },
+                    )
                     assert not f_confirmed.is_error
                     f_conf_text = "".join(c.text for c in f_confirmed.content if hasattr(c, "text"))
                     assert "deleted" in f_conf_text

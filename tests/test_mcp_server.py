@@ -87,7 +87,9 @@ def test_mcp_tools_unit_with_session():
 
     with Session(engine, expire_on_commit=False) as session:
         with session.begin():
-            del_res = tools.delete_memory(id=mem_id, session=session, user_id=user_id)
+            del_res = tools.delete_memory(
+                id=mem_id, expected_version=2, session=session, user_id=user_id
+            )
             assert del_res["deleted"] is True
 
     with Session(engine, expire_on_commit=False) as session:

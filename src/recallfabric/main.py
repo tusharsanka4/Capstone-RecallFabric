@@ -322,6 +322,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             engine = getattr(request.app.state, "database_engine", None)
             client_ip = request.client.host if request.client else None
             raw_key = extract_token_from_request(request, ("x-api-key",))
+            resolved_scopes = None  # API-key sessions; OAuth always supplies an explicit set.
 
             if settings.auth_enabled:
                 if not raw_key:
@@ -415,7 +416,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                         api_key.last_used_at = datetime.now(UTC)
                         auth_sess.commit()
                         resolved_uid = api_key.user_id
-                        resolved_scopes = frozenset()
+                        resolved_scopes = None
                     else:
                         if not rate_limiter.check_rate_limit(
                             hash_oauth_token(raw_key),
@@ -461,7 +462,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                         )
                 else:
                     resolved_uid = settings.mcp_user_id or "default_user"
-                    resolved_scopes = frozenset()
+                    resolved_scopes = None
 
                 rate_key = raw_key or client_ip or resolved_uid
                 if not rate_limiter.check_rate_limit(

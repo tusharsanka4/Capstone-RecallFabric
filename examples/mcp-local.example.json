@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "recallfabric": {
+      "command": "C:\\Users\\tusha\\Desktop\\Projects\\Capstone\\.venv\\Scripts\\python.exe",
+      "args": ["-m", "recallfabric.mcp_server"],
+      "cwd": "C:\\Users\\tusha\\Desktop\\Projects\\Capstone",
+      "env": {
+        "RECALLFABRIC_MCP_TRANSPORT": "stdio",
+        "RECALLFABRIC_AUTH_ENABLED": "true",
+        "RECALLFABRIC_API_KEY": "REPLACE_WITH_AN_ACCOUNT_API_KEY",
+        "RECALLFABRIC_EMBEDDING_CACHE_DIR": "C:\\Users\\tusha\\Desktop\\Projects\\Capstone\\.model-cache"
+      }
+    }
+  }
+}
