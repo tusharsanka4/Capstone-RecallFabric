@@ -55,8 +55,12 @@ def _authorize(client: TestClient, account_key: str, client_name: str) -> dict[s
         data={"request_id": request_id, "csrf_token": csrf, "api_key": account_key},
         follow_redirects=False,
     )
-    assert approved.status_code == 303
-    code = approved.headers["location"].split("code=")[1].split("&")[0]
+    assert approved.status_code == 200
+    from html import unescape
+    from urllib.parse import parse_qs, urlsplit
+
+    callback = unescape(approved.text.split('href="')[1].split('"')[0])
+    code = parse_qs(urlsplit(callback).query)["code"][0]
     response = client.post(
         "/auth/oauth/token",
         data={

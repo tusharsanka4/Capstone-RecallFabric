@@ -63,6 +63,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     mcp_server = create_mcp_server(settings=settings)
     mcp_subapp = mcp_server.streamable_http_app(
         streamable_http_path="/",
+        json_response=settings.mcp_json_response,
+        stateless_http=settings.mcp_stateless_http,
         transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False),
     )
 

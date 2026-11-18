@@ -8,7 +8,7 @@ from urllib.parse import parse_qs, urlencode, urlsplit, urlunsplit
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request, status
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
@@ -217,7 +217,7 @@ def approve_oauth_client(
     request_id: Annotated[UUID, Form()],
     csrf_token: Annotated[str, Form()],
     api_key: Annotated[str, Form()],
-) -> RedirectResponse:
+) -> HTMLResponse:
     now = datetime.now(UTC)
     transaction = db.scalar(
         select(OAuthAuthorizationRequest)
@@ -257,7 +257,23 @@ def approve_oauth_client(
         params["state"] = transaction.state
     parts = urlsplit(transaction.redirect_uri)
     query = "&".join(filter(None, [parts.query, urlencode(params)]))
-    return RedirectResponse(urlunsplit(parts._replace(query=query)), status_code=303)
+    # Chromium applies form-action to HTTP redirects from a form submission.
+    # Finish the same-origin POST before navigating to the registered OAuth callback.
+    callback = escape(urlunsplit(parts._replace(query=query)), quote=True)
+    return HTMLResponse(
+        '<!doctype html><html><head><meta charset="utf-8">'
+        f'<meta http-equiv="refresh" content="0;url={callback}">'
+        '<title>Authorization approved</title></head><body>'
+        f'<a href="{callback}" rel="noreferrer">Continue to your connected app</a>'
+        '</body></html>',
+        headers={
+            "Cache-Control": "no-store",
+            "Referrer-Policy": "no-referrer",
+            "Content-Security-Policy": (
+                "default-src 'none'; form-action 'self'; frame-ancestors 'none'"
+            ),
+        },
+    )
 
 
 @router.post("/oauth/token")

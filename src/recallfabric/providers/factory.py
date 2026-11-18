@@ -47,7 +47,7 @@ def get_provider(
         settings = Settings()
     ptype = (provider_type or settings.llm_provider).lower().strip()
     if ptype == "ollama":
-        if settings.environment == "production":
+        if settings.environment == "production" and not settings.local_ollama_allowed():
             raise ValueError(
                 "Ollama provider cannot be used when RECALLFABRIC_ENVIRONMENT=production. "
                 "Configure a hosted provider (openai, anthropic, or gemini)."

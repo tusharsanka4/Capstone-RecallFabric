@@ -52,6 +52,12 @@ class Settings(BaseSettings):
     extraction_min_importance: float = Field(default=0.6, ge=0.0, le=1.0)
     extraction_min_confidence: float = Field(default=0.5, ge=0.0, le=1.0)
     retrieval_min_similarity: float = Field(default=0.4, ge=-1.0, le=1.0)
+    recall_min_relevance: float = Field(
+        default=0.60,
+        ge=-1.0,
+        le=1.0,
+        description="Minimum raw cosine similarity for MCP recall/search_memory; not ranking score",
+    )
     rank_w_relevance: float = Field(default=0.40, ge=0.0, le=1.0)
     rank_w_importance: float = Field(default=0.20, ge=0.0, le=1.0)
     rank_w_confidence: float = Field(default=0.10, ge=0.0, le=1.0)
@@ -94,6 +100,9 @@ class Settings(BaseSettings):
     rate_limit_burst: int = Field(default=40, ge=1, le=100000)
     max_request_size_bytes: int = Field(default=1_048_576, ge=1024, le=104_857_600)
     mcp_transport: Literal["stdio", "streamable-http", "sse"] = "stdio"
+    mcp_json_response: bool = False
+    mcp_stateless_http: bool = False
+    allow_local_ollama: bool = False
     mcp_host: str = Field(default="127.0.0.1")
     mcp_port: int = Field(default=8001, ge=1, le=65535)
     mcp_user_id: str | None = None
@@ -121,6 +130,16 @@ class Settings(BaseSettings):
     @classmethod
     def blank_provider_is_default(cls, value):
         return None if isinstance(value, str) and not value.strip() else value
+
+    def local_ollama_allowed(self) -> bool:
+        from urllib.parse import urlsplit
+
+        parsed = urlsplit(self.llm_base_url)
+        return bool(
+            self.allow_local_ollama
+            and parsed.scheme == "http"
+            and parsed.hostname in {"localhost", "127.0.0.1", "::1"}
+        )
 
     def oauth_resource(self) -> str:
         return (self.mcp_public_url or "").rstrip("/") + "/mcp"
@@ -198,7 +217,7 @@ class Settings(BaseSettings):
             )
 
         # 4. LLM Provider selection and API key validation
-        if self.llm_provider == "ollama":
+        if self.llm_provider == "ollama" and not self.local_ollama_allowed():
             if self.openai_api_key and self.openai_api_key.get_secret_value().strip():
                 self.llm_provider = "openai"
             elif self.gemini_api_key and self.gemini_api_key.get_secret_value().strip():

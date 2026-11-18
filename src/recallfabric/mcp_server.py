@@ -448,7 +448,10 @@ class RecallFabricTools:
             scored_items.append((mem, score, sim_val))
 
         scored_items.sort(key=lambda x: x[1], reverse=True)
-        top_items = scored_items[:limit]
+        # Rank a wider candidate pool, then return up to limit relevant matches.
+        # Importance/recency/frequency must never rescue a semantically weak match.
+        min_relevance = max(threshold, self.settings.recall_min_relevance)
+        top_items = [item for item in scored_items if item[2] >= min_relevance][:limit]
 
         for mem, _, _ in top_items:
             mem.access_count += 1
