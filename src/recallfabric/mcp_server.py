@@ -25,6 +25,7 @@ from recallfabric.memory_manager.dedupe import (
     deduplicate_and_store,
     find_duplicate_memory,
 )
+from recallfabric.memory_manager.entities import project_scope, with_project_metadata
 from recallfabric.memory_manager.events import get_memory_provenance_records, record_event
 from recallfabric.providers import get_extraction_provider
 from recallfabric.providers.base import ProviderUnavailable
@@ -243,6 +244,7 @@ class RecallFabricTools:
             for c_text, m_type, imp, conf, reason in valid_candidates:
                 emb = self.embedder.embed(c_text)
                 matched, _ = find_duplicate_memory(
+                    content=c_text,
                     session=session,
                     user_id=uid,
                     memory_type=m_type,
@@ -310,6 +312,7 @@ class RecallFabricTools:
         emb = self.embedder.embed(clean_text)
         acquire_dedupe_lock(session, uid)
         matched, _ = find_duplicate_memory(
+            content=clean_text,
             session=session,
             user_id=uid,
             memory_type=type,
@@ -425,6 +428,7 @@ class RecallFabricTools:
         if type is not None:
             stmt = stmt.where(Memory.type == type)
 
+        stmt, entities_by_id = project_scope(stmt, session, uid, query, enc_key)
         candidates = session.execute(stmt.limit(cand_limit)).all()
         scored_items = []
         now_utc = datetime.now(UTC)
@@ -469,6 +473,7 @@ class RecallFabricTools:
                 "version": mem.version,
                 "score": round(score, 4),
                 "similarity": round(sim_val, 4),
+                "entities": entities_by_id.get(mem.id, []),
             }
             result_memories.append(item)
 
@@ -712,7 +717,9 @@ class RecallFabricTools:
             previous_version=previous.version,
             status="active",
             creation_reason="Updated via MCP update_memory tool",
-            attributes=previous.attributes or {},
+            attributes=with_project_metadata(
+                new_content, previous.attributes, inherited=previous.attributes
+            ),
         )
         if cached is not None:
             new_mem.embedding, new_mem.embedding_model, new_mem.embedding_dimensions = cached
@@ -1075,8 +1082,8 @@ def create_mcp_server(
             "Correct a specific stored fact, preference or accepted project decision when the user "
             "supplies a durable change. First recall/list the target and use its current ID and "
             "expected_version; reload on conflict. A direct user correction such as "
-            "\"Actually, we are "
-            "using SQLite now\" is user-provided information, not an assistant "
+            '"Actually, we are '
+            'using SQLite now" is user-provided information, not an assistant '
             "recommendation. Resolve "
             "which project/memory is meant before updating if ambiguous. Never "
             "persist an unaccepted "

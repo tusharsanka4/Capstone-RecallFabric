@@ -9,6 +9,7 @@ from recallfabric.core.config import Settings
 from recallfabric.db.models import Memory
 from recallfabric.embeddings.service import EmbeddingProvider
 from recallfabric.memory_manager.dedupe import acquire_dedupe_lock, deduplicate_and_store
+from recallfabric.memory_manager.entities import project_scope, with_project_metadata
 from recallfabric.memory_manager.events import record_event
 from recallfabric.ranking.scoring import (
     calculate_frequency,
@@ -81,7 +82,7 @@ def store_memory_service(
         confidence=confidence,
         source=source,
         creation_reason=creation_reason,
-        attributes=metadata,
+        attributes=with_project_metadata(content, metadata),
         embedding=embedding.vector,
         embedding_model=embedding.model,
         embedding_dimensions=embedding.dimensions,
@@ -147,6 +148,7 @@ def search_memory_service(
         statement = statement.where(Memory.type == type)
 
     statement = statement.order_by(semantic_relevance.desc()).limit(candidate_limit + 1)
+    statement, _ = project_scope(statement, session, user_id, query, enc_key, status)
     rows = session.execute(statement).all()
     candidate_rows = rows[:candidate_limit]
 
@@ -201,6 +203,7 @@ def search_memory_service(
         if type is not None:
             text_stmt = text_stmt.where(Memory.type == type)
         text_stmt = text_stmt.order_by(Memory.created_at.desc()).limit(limit - len(results))
+        text_stmt, _ = project_scope(text_stmt, session, user_id, query, enc_key, status)
         for text_mem in session.scalars(text_stmt).all():
             if text_mem.id not in seen_ids:
                 decrypted = (
@@ -295,7 +298,7 @@ def update_memory_service(
         previous_version=previous.version,
         status=status,
         creation_reason=creation_reason,
-        attributes=metadata,
+        attributes=with_project_metadata(content, metadata, inherited=previous.attributes),
     )
     if cached is not None:
         new_mem.embedding, new_mem.embedding_model, new_mem.embedding_dimensions = cached

@@ -6,6 +6,7 @@ from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from recallfabric.db.models import Memory
+from recallfabric.memory_manager.entities import project_scope, with_project_metadata
 from recallfabric.memory_manager.events import record_event
 from recallfabric.security.encryption import decrypt_content, encrypt_content
 
@@ -30,6 +31,7 @@ def find_duplicate_memory(
     embedding_model: str,
     embedding_dimensions: int,
     threshold: float,
+    content: str | None = None,
 ) -> tuple[Memory | None, float | None]:
     try:
         similarity = (1.0 - Memory.embedding.cosine_distance(embedding_vector)).label("similarity")
@@ -45,6 +47,8 @@ def find_duplicate_memory(
             .order_by(similarity.desc())
             .limit(1)
         )
+        if content is not None:
+            statement, _ = project_scope(statement, session, user_id, content)
         row = session.execute(statement).first()
         if row is not None:
             if hasattr(row, "__len__") and len(row) == 2:
@@ -80,6 +84,7 @@ def deduplicate_and_store(
         embedding_model=embedding_model,
         embedding_dimensions=embedding_dimensions,
         threshold=threshold,
+        content=content,
     )
 
     if matched is not None:
@@ -105,7 +110,7 @@ def deduplicate_and_store(
             matched.confidence = merged_confidence
             matched.access_count += 1
             matched.last_accessed_at = datetime.now(UTC)
-            matched.attributes = merged_metadata
+            matched.attributes = with_project_metadata(content, merged_metadata)
             session.flush()
             record_event(
                 session=session,
@@ -135,7 +140,7 @@ def deduplicate_and_store(
             confidence=merged_confidence,
             source=source,
             creation_reason=creation_reason or matched.creation_reason,
-            attributes=merged_metadata,
+            attributes=with_project_metadata(content, merged_metadata),
             embedding=embedding_vector,
             embedding_model=embedding_model,
             embedding_dimensions=embedding_dimensions,
@@ -171,7 +176,7 @@ def deduplicate_and_store(
         confidence=confidence,
         source=source,
         creation_reason=creation_reason,
-        attributes=new_metadata,
+        attributes=with_project_metadata(content, new_metadata),
         embedding=embedding_vector,
         embedding_model=embedding_model,
         embedding_dimensions=embedding_dimensions,

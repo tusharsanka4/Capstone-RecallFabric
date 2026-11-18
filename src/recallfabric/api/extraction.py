@@ -15,6 +15,7 @@ from recallfabric.memory_manager.dedupe import (
     deduplicate_and_store,
     find_duplicate_memory,
 )
+from recallfabric.memory_manager.entities import with_project_metadata
 from recallfabric.memory_manager.events import record_event
 from recallfabric.providers import (
     LLMProvider,
@@ -293,6 +294,7 @@ def _persist_extraction(
                         != "user_confirmed_assistant_recommendation"
                     ):
                         matched, _ = find_duplicate_memory(
+                            content=mem_create.content,
                             session=session,
                             user_id=mem_create.user_id,
                             memory_type=mem_create.type,
@@ -351,7 +353,7 @@ def _persist_extraction(
                         values["content"] = encrypt_content(mem_create.content, enc_key)
                     memory = Memory(
                         **values,
-                        attributes=mem_create.metadata,
+                        attributes=with_project_metadata(mem_create.content, mem_create.metadata),
                         embedding=embedding.vector,
                         embedding_model=embedding.model,
                         embedding_dimensions=embedding.dimensions,

@@ -1,4 +1,3 @@
-
 """User-scoped memory CRUD and basic text search."""
 
 from datetime import UTC, datetime
@@ -14,6 +13,7 @@ from recallfabric.db.models import ApiKey, Memory
 from recallfabric.db.session import get_session
 from recallfabric.embeddings.service import EmbeddingProvider, get_embedding_provider
 from recallfabric.memory_manager.dedupe import acquire_dedupe_lock, deduplicate_and_store
+from recallfabric.memory_manager.entities import project_scope, with_project_metadata
 from recallfabric.memory_manager.events import (
     get_memory_provenance_records,
     record_event,
@@ -150,7 +150,7 @@ def create_memory(
                 values["content"] = encrypt_content(payload.content, enc_key)
             memory = Memory(
                 **values,
-                attributes=payload.metadata,
+                attributes=with_project_metadata(payload.content, payload.metadata),
                 embedding=embedding.vector,
                 embedding_model=embedding.model,
                 embedding_dimensions=embedding.dimensions,
@@ -249,6 +249,9 @@ def retrieve_memories(
     statement = statement.order_by(semantic_relevance.desc()).limit(candidate_limit + 1)
 
     with session.begin():
+        statement, _ = project_scope(
+            statement, session, payload.user_id, payload.query, enc_key, payload.status
+        )
         rows = session.execute(statement).all()
         has_more = len(rows) > payload.limit
         candidate_rows = rows[:candidate_limit]
@@ -398,7 +401,9 @@ def update_memory(
             user_id=previous.user_id,
             version=previous.version + 1,
             previous_version=previous.version,
-            attributes=payload.metadata,
+            attributes=with_project_metadata(
+                payload.content, payload.metadata, inherited=previous.attributes
+            ),
         )
         if cached is not None:
             memory.embedding, memory.embedding_model, memory.embedding_dimensions = cached

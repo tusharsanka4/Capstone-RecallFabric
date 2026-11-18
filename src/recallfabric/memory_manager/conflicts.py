@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from recallfabric.db.models import Memory
+from recallfabric.memory_manager.entities import project_scope, with_project_metadata
 from recallfabric.memory_manager.events import record_event
 from recallfabric.security.encryption import decrypt_content, encrypt_content
 
@@ -32,6 +33,7 @@ def find_conflict_candidates(
     embedding_dimensions: int,
     min_similarity: float,
     max_similarity: float,
+    content: str | None = None,
 ) -> list[tuple[Memory, float]]:
     try:
         similarity = (1.0 - Memory.embedding.cosine_distance(embedding_vector)).label("similarity")
@@ -49,6 +51,8 @@ def find_conflict_candidates(
             .order_by(similarity.desc())
             .limit(5)
         )
+        if content is not None:
+            statement, _ = project_scope(statement, session, user_id, content)
         rows = session.execute(statement).all()
         results = []
         for row in rows:
@@ -127,7 +131,7 @@ def resolve_conflict_or_store(
     if (metadata or {}).get(
         "origin"
     ) == "user_confirmed_assistant_recommendation" and decision_slot:
-        existing_decision = session.execute(
+        decision_query = (
             select(Memory)
             .where(
                 Memory.user_id == user_id,
@@ -139,7 +143,9 @@ def resolve_conflict_or_store(
             )
             .order_by(Memory.created_at.desc())
             .limit(1)
-        ).scalar_one_or_none()
+        )
+        decision_query, _ = project_scope(decision_query, session, user_id, content)
+        existing_decision = session.execute(decision_query).scalar_one_or_none()
         if existing_decision is not None and decrypt_content(existing_decision.content) == content:
             return existing_decision, "consolidated", existing_decision.id, {"duplicate": True}
     else:
@@ -153,6 +159,7 @@ def resolve_conflict_or_store(
         embedding_dimensions=embedding_dimensions,
         min_similarity=min_similarity,
         max_similarity=max_similarity,
+        content=content,
     )
     if existing_decision is not None:
         candidates = [(existing_decision, 1.0)] + [
@@ -173,7 +180,7 @@ def resolve_conflict_or_store(
             confidence=confidence,
             source=source,
             creation_reason=creation_reason,
-            attributes=new_meta,
+            attributes=with_project_metadata(content, new_meta),
             embedding=embedding_vector,
             embedding_model=embedding_model,
             embedding_dimensions=embedding_dimensions,
@@ -208,7 +215,7 @@ def resolve_conflict_or_store(
             confidence=confidence,
             source=source,
             creation_reason=creation_reason,
-            attributes=new_meta,
+            attributes=with_project_metadata(content, new_meta),
             embedding=embedding_vector,
             embedding_model=embedding_model,
             embedding_dimensions=embedding_dimensions,
@@ -257,7 +264,7 @@ def resolve_conflict_or_store(
                 confidence=confidence,
                 source=source,
                 creation_reason=creation_reason,
-                attributes=new_meta,
+                attributes=with_project_metadata(content, new_meta),
                 embedding=embedding_vector,
                 embedding_model=embedding_model,
                 embedding_dimensions=embedding_dimensions,
@@ -309,7 +316,7 @@ def resolve_conflict_or_store(
                 confidence=merged_confidence,
                 source=source,
                 creation_reason=update_reason,
-                attributes=merged_metadata,
+                attributes=with_project_metadata(content, merged_metadata),
                 embedding=embedding_vector,
                 embedding_model=embedding_model,
                 embedding_dimensions=embedding_dimensions,
@@ -349,7 +356,7 @@ def resolve_conflict_or_store(
         confidence=confidence,
         source=source,
         creation_reason=creation_reason,
-        attributes=new_meta,
+        attributes=with_project_metadata(content, new_meta),
         embedding=embedding_vector,
         embedding_model=embedding_model,
         embedding_dimensions=embedding_dimensions,

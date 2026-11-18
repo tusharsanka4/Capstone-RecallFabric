@@ -165,6 +165,7 @@ def process_ingest_job_sync(
                     for c_text, m_type, imp, conf, reason in valid_candidates:
                         vec = emb.embed(c_text)
                         matched, _ = find_duplicate_memory(
+                            content=c_text,
                             session=session,
                             user_id=user_id,
                             memory_type=m_type,
