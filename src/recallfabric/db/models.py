@@ -163,6 +163,7 @@ class OAuthAuthorizationCode(Base):
         Index("ix_oauth_authorization_codes_hash", "code_hash"),
     )
 
+    resource: Mapped[str | None] = mapped_column(String(2048), nullable=True)
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     code_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     client_id: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -182,6 +183,7 @@ class OAuthAccessToken(Base):
         Index("ix_oauth_access_tokens_user_id", "user_id"),
     )
 
+    resource: Mapped[str | None] = mapped_column(String(2048), nullable=True)
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     token_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     client_id: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -202,6 +204,7 @@ class OAuthRefreshToken(Base):
         Index("ix_oauth_refresh_tokens_family", "family_id"),
     )
 
+    resource: Mapped[str | None] = mapped_column(String(2048), nullable=True)
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     token_hash: Mapped[str] = mapped_column(String(64), nullable=False)
     family_id: Mapped[UUID] = mapped_column(nullable=False, default=uuid4)
@@ -220,6 +223,7 @@ class OAuthAuthorizationRequest(Base):
     __tablename__ = "oauth_authorization_requests"
     __table_args__ = (Index("ix_oauth_authorization_requests_expires", "expires_at"),)
 
+    resource: Mapped[str | None] = mapped_column(String(2048), nullable=True)
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     client_id: Mapped[str] = mapped_column(String(255), nullable=False)
     redirect_uri: Mapped[str] = mapped_column(String(2048), nullable=False)

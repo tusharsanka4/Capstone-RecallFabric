@@ -48,14 +48,12 @@ def database_is_ready(engine: Engine) -> bool:
 
 
 def check_ssl_in_use(target: Engine | Connection) -> bool:
-    """Check if the connection is currently using SSL via pg_stat_ssl."""
-    query = text("SELECT ssl FROM pg_stat_ssl WHERE pid = pg_backend_pid()")
+    """Check client TLS, including when a database proxy terminates TLS."""
     try:
         if isinstance(target, Engine):
             with target.connect() as connection:
-                res = connection.execute(query).scalar_one_or_none()
-        else:
-            res = target.execute(query).scalar_one_or_none()
-        return bool(res)
+                return check_ssl_in_use(connection)
+        driver = target.connection.driver_connection
+        return bool(driver.pgconn.ssl_in_use)
     except Exception:
         return False

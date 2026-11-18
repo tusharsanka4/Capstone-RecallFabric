@@ -44,6 +44,7 @@ def _authorize(client: TestClient, account_key: str, client_name: str) -> dict[s
             "code_challenge_method": "S256",
             "scope": "memory:read memory:write offline_access",
             "state": "opaque-client-state",
+            "resource": "https://memory.example/mcp",
         },
     )
     assert authorize.status_code == 200
@@ -59,6 +60,7 @@ def _authorize(client: TestClient, account_key: str, client_name: str) -> dict[s
     response = client.post(
         "/auth/oauth/token",
         data={
+            "resource": "https://memory.example/mcp",
             "grant_type": "authorization_code",
             "client_id": client_id,
             "redirect_uri": "https://client.example/callback",
@@ -107,6 +109,7 @@ def test_two_oauth_clients_link_same_account_and_enforce_token_lifecycle():
             refreshed = client.post(
                 "/auth/oauth/token",
                 data={
+                    "resource": "https://memory.example/mcp",
                     "grant_type": "refresh_token",
                     "client_id": chatgpt["client_id"],
                     "refresh_token": chatgpt["refresh_token"],
@@ -117,6 +120,7 @@ def test_two_oauth_clients_link_same_account_and_enforce_token_lifecycle():
             reused = client.post(
                 "/auth/oauth/token",
                 data={
+                    "resource": "https://memory.example/mcp",
                     "grant_type": "refresh_token",
                     "client_id": chatgpt["client_id"],
                     "refresh_token": chatgpt["refresh_token"],
@@ -127,6 +131,7 @@ def test_two_oauth_clients_link_same_account_and_enforce_token_lifecycle():
             invalid_pkce = client.post(
                 "/auth/oauth/token",
                 data={
+                    "resource": "https://memory.example/mcp",
                     "grant_type": "authorization_code",
                     "client_id": claude["client_id"],
                     "code": "not-a-code",

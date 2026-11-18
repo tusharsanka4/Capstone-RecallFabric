@@ -1190,6 +1190,22 @@
               ],
               "title": "State"
             }
+          },
+          {
+            "name": "resource",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Resource"
+            }
           }
         ],
         "responses": {
@@ -4425,13 +4441,6 @@
       },
       "SignupRequest": {
         "properties": {
-          "user_id": {
-            "type": "string",
-            "maxLength": 255,
-            "minLength": 1,
-            "title": "User Id",
-            "description": "Desired unique user identifier"
-          },
           "name": {
             "anyOf": [
               {
@@ -4447,10 +4456,8 @@
             "default": "default"
           }
         },
+        "additionalProperties": false,
         "type": "object",
-        "required": [
-          "user_id"
-        ],
         "title": "SignupRequest"
       },
       "SignupResponse": {

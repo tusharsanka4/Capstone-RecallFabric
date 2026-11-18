@@ -85,6 +85,7 @@ def database():
                     OAuthAccessToken(
                         token_hash=hash_oauth_token(raw),
                         client_id="test",
+                        resource=settings.oauth_resource(),
                         user_id="alice",
                         scope=scope,
                         expires_at=datetime.now(UTC) + timedelta(hours=1),

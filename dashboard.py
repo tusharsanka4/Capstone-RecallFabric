@@ -1073,7 +1073,7 @@ with tab_keys:
                                 new_uid.strip(),
                                 name=key_name.strip() or "default",
                             )
-                            st.success(f"User onboarded! Key generated for {new_uid}:")
+                            st.success(f"User onboarded! Account ID: {res['user_id']}")
                             st.code(res.get("api_key"), language="text")
                             st.warning("Save this key now. It cannot be shown again.")
                     except DashboardClientError as exc:

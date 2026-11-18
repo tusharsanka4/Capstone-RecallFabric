@@ -398,7 +398,7 @@ def signup_user(
     c = _get_client(client, timeout=10.0)
     r = c.post(
         f"{api_url}/v1/auth/signup",
-        json={"user_id": user_id, "name": name or "default"},
+        json={"name": name or "default"},
     )
     _handle_response(r)
     return r.json()

@@ -2,8 +2,9 @@ import base64
 import hashlib
 import secrets
 from datetime import UTC, datetime, timedelta
+from html import escape
 from typing import Annotated
-from urllib.parse import parse_qs, urlencode
+from urllib.parse import parse_qs, urlencode, urlsplit, urlunsplit
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request, status
@@ -53,11 +54,26 @@ def _oauth_error(error: str, description: str) -> HTTPException:
 
 
 def _valid_redirect_uri(uri: str) -> bool:
-    return (
-        uri.startswith("https://")
-        or uri.startswith("http://127.0.0.1")
-        or uri.startswith("http://localhost")
+    parsed = urlsplit(uri)
+    return bool(
+        parsed.hostname
+        and not parsed.fragment
+        and not parsed.username
+        and not parsed.password
+        and (
+            parsed.scheme == "https"
+            or (parsed.scheme == "http" and parsed.hostname in {"localhost", "127.0.0.1", "::1"})
+        )
     )
+
+
+def _validate_resource(resource: str | None, settings: Settings) -> str:
+    expected = settings.oauth_resource()
+    if resource != expected:
+        raise _oauth_error(
+            "invalid_target", "The requested resource does not match this MCP server"
+        )
+    return expected
 
 
 def _allowed_scopes(scope: str, settings: Settings) -> set[str]:
@@ -69,7 +85,13 @@ def _allowed_scopes(scope: str, settings: Settings) -> set[str]:
 
 
 def _issue_tokens(
-    db: Session, settings: Settings, client_id: str, user_id: str, scope: str
+    db: Session,
+    settings: Settings,
+    client_id: str,
+    user_id: str,
+    scope: str,
+    resource: str,
+    family_id: UUID | None = None,
 ) -> dict[str, object]:
     now = datetime.now(UTC)
     access_token, access_hash = generate_oauth_token("rf_at")
@@ -77,6 +99,7 @@ def _issue_tokens(
     db.add(
         OAuthAccessToken(
             token_hash=access_hash,
+            resource=resource,
             client_id=client_id,
             user_id=user_id,
             scope=scope,
@@ -86,6 +109,8 @@ def _issue_tokens(
     db.add(
         OAuthRefreshToken(
             token_hash=refresh_hash,
+            resource=resource,
+            family_id=family_id or uuid4(),
             client_id=client_id,
             user_id=user_id,
             scope=scope,
@@ -138,6 +163,7 @@ def authorize_oauth_client(
     code_challenge_method: str = "",
     scope: str = "memory:read memory:write",
     state: str | None = None,
+    resource: str | None = None,
 ) -> HTMLResponse:
     client = db.scalar(
         select(OAuthClient).where(
@@ -148,6 +174,7 @@ def authorize_oauth_client(
         raise _oauth_error("invalid_request", "Unknown client or redirect URI")
     if code_challenge_method != "S256" or len(code_challenge) != 43:
         raise _oauth_error("invalid_request", "PKCE S256 code_challenge is required")
+    resource = _validate_resource(resource, settings)
     requested = _allowed_scopes(scope, settings)
     transaction = OAuthAuthorizationRequest(
         client_id=client_id,
@@ -155,6 +182,7 @@ def authorize_oauth_client(
         code_challenge=code_challenge,
         scope=" ".join(sorted(requested)),
         state=state,
+        resource=resource,
         csrf_token=secrets.token_urlsafe(32),
         expires_at=datetime.now(UTC) + timedelta(minutes=5),
     )
@@ -163,7 +191,7 @@ def authorize_oauth_client(
     # The API key is a previously-issued credential: its possession is the account proof.
     body = (
         "<html><body><h1>Connect RecallFabric</h1><p>Authorize "
-        f"{client.client_name}? Enter a RecallFabric API key for the account to link.</p>"
+        f"{escape(client.client_name)}? Enter a RecallFabric API key for the account to link.</p>"
         '<form method="post" action="/auth/oauth/authorize/approve">'
         f'<input type="hidden" name="request_id" value="{transaction.id}">'
         f'<input type="hidden" name="csrf_token" value="{transaction.csrf_token}">'
@@ -171,7 +199,15 @@ def authorize_oauth_client(
         '<input type="password" name="api_key" required autocomplete="off"></label>'
         '<button type="submit">Authorize</button></form></body></html>'
     )
-    return HTMLResponse(body, headers={"Cache-Control": "no-store"})
+    return HTMLResponse(
+        body,
+        headers={
+            "Cache-Control": "no-store",
+            "Content-Security-Policy": (
+                "default-src 'none'; form-action 'self'; frame-ancestors 'none'"
+            ),
+        },
+    )
 
 
 @router.post("/oauth/authorize/approve")
@@ -183,7 +219,11 @@ def approve_oauth_client(
     api_key: Annotated[str, Form()],
 ) -> RedirectResponse:
     now = datetime.now(UTC)
-    transaction = db.get(OAuthAuthorizationRequest, request_id)
+    transaction = db.scalar(
+        select(OAuthAuthorizationRequest)
+        .where(OAuthAuthorizationRequest.id == request_id)
+        .with_for_update()
+    )
     key = db.scalar(
         select(ApiKey).where(
             ApiKey.key_hash == hash_api_key(api_key.strip()), ApiKey.revoked_at.is_(None)
@@ -207,6 +247,7 @@ def approve_oauth_client(
             redirect_uri=transaction.redirect_uri,
             code_challenge=transaction.code_challenge,
             scope=transaction.scope,
+            resource=transaction.resource,
             expires_at=now + timedelta(minutes=5),
         )
     )
@@ -214,7 +255,9 @@ def approve_oauth_client(
     params = {"code": raw_code}
     if transaction.state:
         params["state"] = transaction.state
-    return RedirectResponse(f"{transaction.redirect_uri}?{urlencode(params)}", status_code=303)
+    parts = urlsplit(transaction.redirect_uri)
+    query = "&".join(filter(None, [parts.query, urlencode(params)]))
+    return RedirectResponse(urlunsplit(parts._replace(query=query)), status_code=303)
 
 
 @router.post("/oauth/token")
@@ -222,16 +265,18 @@ async def exchange_oauth_token(
     request: Request, db: SessionDep, settings: SettingsDep
 ) -> dict[str, object]:
     form = {key: values[0] for key, values in parse_qs((await request.body()).decode()).items()}
+    resource = _validate_resource(form.get("resource"), settings)
     now = datetime.now(UTC)
     client_id, grant_type = form.get("client_id", ""), form.get("grant_type", "")
     if grant_type == "authorization_code":
         code = db.scalar(
-            select(OAuthAuthorizationCode).where(
-                OAuthAuthorizationCode.code_hash == hash_oauth_token(form.get("code", ""))
-            )
+            select(OAuthAuthorizationCode)
+            .with_for_update()
+            .where(OAuthAuthorizationCode.code_hash == hash_oauth_token(form.get("code", "")))
         )
         if (
             code is None
+            or code.resource != resource
             or code.used_at is not None
             or code.expires_at <= now
             or code.client_id != client_id
@@ -245,17 +290,18 @@ async def exchange_oauth_token(
                 "invalid_grant", "Invalid, expired, or already-used authorization code"
             )
         code.used_at = now
-        response = _issue_tokens(db, settings, client_id, code.user_id, code.scope)
+        response = _issue_tokens(db, settings, client_id, code.user_id, code.scope, resource)
         db.commit()
         return response
     if grant_type == "refresh_token":
         refresh = db.scalar(
-            select(OAuthRefreshToken).where(
-                OAuthRefreshToken.token_hash == hash_oauth_token(form.get("refresh_token", ""))
-            )
+            select(OAuthRefreshToken)
+            .with_for_update()
+            .where(OAuthRefreshToken.token_hash == hash_oauth_token(form.get("refresh_token", "")))
         )
         if (
             refresh is None
+            or refresh.resource != resource
             or refresh.client_id != client_id
             or refresh.expires_at <= now
             or refresh.revoked_at is not None
@@ -270,7 +316,9 @@ async def exchange_oauth_token(
             db.commit()
             raise _oauth_error("invalid_grant", "Refresh-token reuse detected")
         refresh.used_at = now
-        response = _issue_tokens(db, settings, client_id, refresh.user_id, refresh.scope)
+        response = _issue_tokens(
+            db, settings, client_id, refresh.user_id, refresh.scope, resource, refresh.family_id
+        )
         db.commit()
         return response
     raise _oauth_error(
@@ -352,16 +400,17 @@ def signup(
     db: SessionDep,
     settings: SettingsDep,
 ) -> SignupResponse:
-    if settings.auth_enabled and not settings.allow_public_signup:
+    if not settings.allow_public_signup:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Public signup is currently disabled. Contact your administrator.",
         )
 
+    user_id = "rf_user_" + uuid4().hex
     raw_key, key_hash = generate_api_key()
     key_record = ApiKey(
         id=uuid4(),
-        user_id=payload.user_id,
+        user_id=user_id,
         name=payload.name or "default",
         key_hash=key_hash,
     )
@@ -372,14 +421,14 @@ def signup(
     record_audit_event(
         db,
         "user_signup",
-        user_id=payload.user_id,
+        user_id=user_id,
         ip_address=request.client.host if request.client else None,
         detail={"key_id": str(key_record.id), "name": key_record.name},
     )
     db.commit()
 
     return SignupResponse(
-        user_id=payload.user_id,
+        user_id=user_id,
         api_key=raw_key,
         name=key_record.name,
         message="User onboarded successfully. Keep this API key safe.",

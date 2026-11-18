@@ -2,7 +2,7 @@ import math
 from pathlib import Path
 from typing import Literal, Self
 
-from pydantic import Field, SecretStr, model_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from starlette.requests import Request
 
@@ -117,6 +117,14 @@ class Settings(BaseSettings):
     proxy_default_upstream_url: str = Field(default="https://api.openai.com/v1")
     proxy_extract_by_default: bool = Field(default=False)
 
+    @field_validator("chat_provider", "extraction_provider", mode="before")
+    @classmethod
+    def blank_provider_is_default(cls, value):
+        return None if isinstance(value, str) and not value.strip() else value
+
+    def oauth_resource(self) -> str:
+        return (self.mcp_public_url or "").rstrip("/") + "/mcp"
+
     @model_validator(mode="after")
     def resolve_auth_enabled(self) -> Self:
         if self.auth_enabled is None:
@@ -140,6 +148,28 @@ class Settings(BaseSettings):
     def validate_production_settings(self) -> Self:
         if self.environment != "production":
             return self
+
+        from urllib.parse import urlsplit
+
+        for value in (self.mcp_public_url, self.oauth_authorization_server):
+            if value:
+                parsed = urlsplit(value)
+                if (
+                    parsed.scheme != "https"
+                    or not parsed.hostname
+                    or parsed.username
+                    or parsed.password
+                    or parsed.query
+                    or parsed.fragment
+                    or parsed.path not in ("", "/")
+                ):
+                    raise ValueError("Production OAuth URLs must be HTTPS origins without paths")
+        if (
+            self.oauth_authorization_server
+            and self.mcp_public_url
+            and self.oauth_authorization_server.rstrip("/") != self.mcp_public_url.rstrip("/")
+        ):
+            raise ValueError("The built-in OAuth server must use the MCP public origin")
 
         # 1. Refuse to start with auth disabled
         if not self.auth_enabled:
@@ -298,4 +328,4 @@ def normalize_database_url(url: str) -> str:
 
 
 def get_settings(request: Request) -> Settings:
-    return getattr(request.app.state, "settings", Settings())
+    return getattr(request.app.state, "settings", None) or Settings()

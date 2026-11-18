@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class CreateApiKeyRequest(BaseModel):
@@ -27,7 +27,7 @@ class ApiKeyInfoResponse(BaseModel):
 
 
 class SignupRequest(BaseModel):
-    user_id: str = Field(min_length=1, max_length=255, description="Desired unique user identifier")
+    model_config = ConfigDict(extra="forbid")
     name: str | None = Field(
         default="default", max_length=255, description="Optional key description"
     )

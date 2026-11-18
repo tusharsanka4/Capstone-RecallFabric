@@ -166,6 +166,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def custom_http_exception_handler(
         request: Request, exc: HTTPException | StarletteHTTPException
     ):
+        if "/auth/oauth/" in request.url.path and isinstance(exc.detail, dict):
+            return JSONResponse(
+                status_code=exc.status_code,
+                content=exc.detail,
+                headers={"Cache-Control": "no-store"},
+            )
         if request.url.path.startswith("/v1"):
             code = http_code_names.get(exc.status_code, f"HTTP_{exc.status_code}")
             return JSONResponse(
@@ -369,6 +375,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                         select(OAuthAccessToken).where(
                             OAuthAccessToken.token_hash == hash_oauth_token(raw_key),
                             OAuthAccessToken.revoked_at.is_(None),
+                            OAuthAccessToken.resource == settings.oauth_resource(),
                             OAuthAccessToken.expires_at > datetime.now(UTC),
                         )
                     )
@@ -398,6 +405,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                                     "code": "UNAUTHORIZED",
                                     "message": "Invalid or revoked API key or OAuth token",
                                 }
+                            },
+                            headers={
+                                "WWW-Authenticate": (
+                                    'Bearer error="invalid_token", resource_metadata="'
+                                    f"{(settings.mcp_public_url or '').rstrip('/')}"
+                                    '/.well-known/oauth-protected-resource"'
+                                )
                             },
                         )
                     if oauth_token is None and not rate_limiter.check_rate_limit(
