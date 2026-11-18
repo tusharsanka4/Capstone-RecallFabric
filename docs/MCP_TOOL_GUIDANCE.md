@@ -1,5 +1,36 @@
 # MCP invocation guidance
 
+For installation, account provisioning, and client connections, start with the
+[canonical setup guide](../README.md).
+
+## Conservative automatic writes
+
+`remember`, server instructions, and `use_memory` now encourage saving clearly durable
+user facts, preferences, constraints, and confirmed project decisions without requiring
+the phrase "remember this". Examples include a vertical secondary monitor, a Fedora
+development machine, free-tier project constraints, and an explicitly changed backend.
+Temporary feelings, hypotheticals, tentative plans, quotations, general knowledge, and
+unaccepted assistant suggestions do not qualify. Routine save narration is discouraged.
+
+For changed state, recall the relevant current record and call `update_memory` with its
+ID and expected version. The existing revision service supersedes the old version;
+there is no additional writer or reconciliation mechanism. The existing acceptance gate
+also recognizes compound confirmations such as "Sounds good, let's use that." while
+continuing to reject ambiguous multiple alternatives and tentative replies.
+
+This is client guidance, not passive monitoring: MCP receives tool calls, not the whole
+conversation. Explicit `remember` calls still store the supplied content; the server
+cannot independently establish whether the client selected an eligible user statement.
+Conversation extraction remains opt-in and uses the existing filters and acceptance gate.
+Clients retain control of tool invocation and may require write approval.
+
+Focused verification: 100 passed, 4 skipped. After backend-only reload, authenticated
+public recall, initialization, tool discovery, readiness, and OAuth metadata checks
+passed; public tool contracts excluding descriptions were unchanged. Real-client
+automatic write behavior has not been verified in this update.
+
+## Earlier recall guidance checkpoint
+
 Guidance-only update: tool schemas, annotations, authentication, OAuth origins, embedding
 model, relevance threshold, extraction and memory services are unchanged.
 

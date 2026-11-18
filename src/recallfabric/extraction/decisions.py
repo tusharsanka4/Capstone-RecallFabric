@@ -44,8 +44,8 @@ _PROMPT_INJECTION = re.compile(
     re.IGNORECASE,
 )
 _GENERIC = re.compile(
-    r"^\s*(sounds good|that works|works for me|agreed|let's use that|use that|"
-    r"go with that)[.!\s]*$",
+    r"^\s*(?:(?:sounds good|that works|works for me|agreed|let's use that|use that|"
+    r"go with that)(?:[.!?,;\s]+|$))+$",
     re.IGNORECASE,
 )
 _ALTERNATIVES = re.compile(r"\b(or|alternatives|options)\b|(?:^|\n)\s*[1-9][.)]\s", re.IGNORECASE)
