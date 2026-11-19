@@ -9,7 +9,6 @@ tests
 evaluation
 scratch
 *.pdf
-git-files.txt
 verify_*.py
 dashboard.py
 __pycache__
