@@ -1,3 +1,8 @@
+"""Convert conversation text into validated memory candidates.
+
+Extraction proposes facts; filters, ownership checks, and deduplication determine
+which candidates are persisted. Dry runs return candidates without storing them."""
+
 import json
 from typing import Annotated, Any
 

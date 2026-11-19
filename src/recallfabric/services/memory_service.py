@@ -1,3 +1,8 @@
+"""Shared memory persistence and retrieval used by API and tool adapters.
+
+Callers own transactions; every query must retain its authenticated user filter.
+Vectors support semantic matching, while revisions preserve changes over time."""
+
 from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID

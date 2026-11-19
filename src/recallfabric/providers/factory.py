@@ -1,3 +1,8 @@
+"""Select chat and extraction providers from settings.
+
+Task-specific overrides take precedence over the default LLM provider. Embedding
+provider selection is separate and does not change when the chat model changes."""
+
 from typing import Any
 
 from recallfabric.core.config import Settings

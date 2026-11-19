@@ -40,6 +40,12 @@ class EmbeddingProvider(Protocol):
 
 
 class LocalEmbeddingProvider:
+    """Run the embedding model in the API process; Neon stores its output vectors.
+
+    Passage and query embeddings must use the same model and dimensions to be
+    comparable. This provider is independent of the chat/extraction LLM.
+    """
+
     def __init__(self, settings: Settings):
         from fastembed import TextEmbedding
 

@@ -8,6 +8,8 @@ from recallfabric.security.auth import generate_oauth_token, hash_oauth_token
 
 def test_protected_resource_metadata_advertises_configured_authorization_server():
     settings = Settings(
+        # Unit tests must not inherit the developer's production .env or secrets.
+        _env_file=None,
         auth_enabled=False,
         mcp_public_url="https://memory.example.com",
         oauth_authorization_server="https://login.example.com",

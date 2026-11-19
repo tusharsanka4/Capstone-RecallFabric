@@ -1,3 +1,10 @@
+"""Expose account-scoped memory operations to MCP-compatible agents.
+
+The HTTP middleware authenticates requests and supplies request-local identity.
+Tool adapters validate inputs and translate failures; database ownership filters
+and transaction locks enforce isolation independently of the model's instructions.
+"""
+
 import json
 import logging
 import os
@@ -908,12 +915,19 @@ class RecallFabricTools:
             user_id=user_id,
         )
         mem = res.get("memory") or (res["memories"][0] if res.get("memories") else {})
+        # A caller-supplied session belongs to the caller. Close only the session
+        # opened here, so repeated legacy tool calls cannot exhaust the DB pool.
+        if session is not None:
+            resolved_user_id = self._resolve_user(session, user_id)
+        else:
+            with Session(self.engine) as identity_session:
+                resolved_user_id = self._resolve_user(identity_session, user_id)
         return {
             "id": mem.get("id"),
             "content": mem.get("content", content),
             "type": mem.get("type", type),
             "version": mem.get("version", 1),
-            "user_id": user_id or self._resolve_user(session or Session(self.engine)),
+            "user_id": resolved_user_id,
             **res,
         }
 

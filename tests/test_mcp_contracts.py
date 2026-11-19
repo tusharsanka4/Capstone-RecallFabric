@@ -1,7 +1,7 @@
 """Protocol-level regression tests that require no database or model downloads."""
 
 from contextlib import asynccontextmanager
-from unittest.mock import Mock
+from unittest.mock import MagicMock, Mock
 from uuid import uuid4
 
 import anyio
@@ -26,6 +26,27 @@ from recallfabric.providers.base import ProviderUnavailable
 @pytest.fixture
 def anyio_backend():
     return "asyncio"
+
+
+@pytest.mark.parametrize("caller_session", [False, True])
+def test_legacy_store_closes_only_its_own_identity_session(monkeypatch, caller_session):
+    tools = RecallFabricTools(Settings(_env_file=None), engine=Mock())
+    tools.remember = Mock(return_value={"memory": {"id": str(uuid4())}})
+    tools._resolve_user = Mock(return_value="authenticated-owner")
+    factory = MagicMock()
+    monkeypatch.setattr("recallfabric.mcp_server.Session", factory)
+    supplied = Mock() if caller_session else None
+    result = tools.store_memory("A durable fact", session=supplied)
+    assert result["user_id"] == "authenticated-owner"
+    if caller_session:
+        factory.assert_not_called()
+        tools._resolve_user.assert_called_once_with(supplied, None)
+        supplied.close.assert_not_called()
+    else:
+        factory.return_value.__exit__.assert_called_once()
+        tools._resolve_user.assert_called_once_with(
+            factory.return_value.__enter__.return_value, None
+        )
 
 
 @asynccontextmanager

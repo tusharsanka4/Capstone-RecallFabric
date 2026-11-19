@@ -494,6 +494,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                         },
                     )
 
+            # ContextVars carry identity into the tool invocation without sharing
+            # one mutable "current user" across simultaneous HTTP requests.
             token = current_mcp_user_id.set(resolved_uid)
             scope_token = current_mcp_scopes.set(resolved_scopes)
             try:
@@ -503,6 +505,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     _mcp_sessions[resp_sess_id] = resolved_uid
                 return response
             finally:
+                # Restore the previous context even when a tool raises an error.
                 current_mcp_user_id.reset(token)
                 current_mcp_scopes.reset(scope_token)
 

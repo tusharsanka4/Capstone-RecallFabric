@@ -1,3 +1,9 @@
+"""Account-key provisioning and OAuth authorization for MCP clients.
+
+An account key proves ownership at consent; clients receive separate OAuth grants
+bound to that account and MCP resource. Administrator credentials never serve as
+user credentials."""
+
 import base64
 import hashlib
 import secrets
@@ -263,9 +269,9 @@ def approve_oauth_client(
     return HTMLResponse(
         '<!doctype html><html><head><meta charset="utf-8">'
         f'<meta http-equiv="refresh" content="0;url={callback}">'
-        '<title>Authorization approved</title></head><body>'
+        "<title>Authorization approved</title></head><body>"
         f'<a href="{callback}" rel="noreferrer">Continue to your connected app</a>'
-        '</body></html>',
+        "</body></html>",
         headers={
             "Cache-Control": "no-store",
             "Referrer-Policy": "no-referrer",

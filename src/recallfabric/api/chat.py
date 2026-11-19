@@ -1,3 +1,6 @@
+"""Dashboard chat orchestration: retrieve account context, call the configured LLM,
+and optionally extract durable facts. External MCP clients use their own chat LLM."""
+
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request

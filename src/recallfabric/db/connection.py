@@ -1,3 +1,8 @@
+"""Build pooled PostgreSQL connections and report database readiness.
+
+The client TLS check measures the application-to-proxy link, which can differ
+from the server-side SSL view when a managed database terminates TLS at a proxy."""
+
 import logging
 from typing import Any
 

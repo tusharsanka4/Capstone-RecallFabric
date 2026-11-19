@@ -513,6 +513,9 @@ Old resource-bound tokens are not valid for the new hostname. Never rewrite audi
 
 ## Project structure and additional docs
 
+For an assignment presentation or code review, start with the
+[code walkthrough](docs/CODE_WALKTHROUGH.md), which maps the request flow to source files.
+
 ```text
 src/recallfabric/   FastAPI, MCP, auth, memory services, providers, embeddings
 migrations/        Alembic schema history
