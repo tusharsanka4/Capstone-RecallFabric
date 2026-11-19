@@ -28,6 +28,12 @@ jobs:
       - name: Set up Python 3.12
         run: uv python install 3.12
 
+      - name: Check pip requirements match uv.lock
+        run: |
+          uv export --locked --no-dev --no-hashes --output-file requirements.txt
+          uv export --locked --no-default-groups --group dev --no-hashes --output-file requirements-dev.txt
+          git diff --exit-code -- requirements.txt requirements-dev.txt
+
       - name: Run Ruff Linter
         run: uv run ruff check .
 
