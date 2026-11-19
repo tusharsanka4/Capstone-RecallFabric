@@ -108,22 +108,25 @@ Expected: an actual RecallFabric call retrieves the memory created through ChatG
 
 For a completely new Windows machine. Complete A–H in order; backend launch and client connection commands live only in Section 1.
 
+RecallFabric's Python dependencies can be installed in one command using [requirements.txt](requirements.txt). Applications such as Cloudflare Tunnel and optional Ollama are installed separately. **You do not need to learn or install uv just to run RecallFabric.**
+
+Install Python + Git → clone → create `.venv` → install requirements → configure `.env` + Neon → install cloudflared → launch using Section 1.
+
 ### A. Install prerequisites
 
-Install prerequisites: **Git, Python 3.12 (managed by uv below), uv, and cloudflared**. Ollama is optional. Use Windows 10 22H2 or newer, PowerShell, Git, uv, and **Python 3.12** (the CI/Docker version; package requirement >=3.12). Allow disk/RAM for dependencies and FastEmbed. Optional local Ollama models need additional disk/RAM; a GPU is optional.
+Install **Git and Python 3.12** (the CI/Docker version; package requirement >=3.12). Use Windows 10 22H2 or newer and PowerShell. Install Python from the [official Windows downloads](https://www.python.org/downloads/windows/), enabling its PATH option, then reopen PowerShell and verify `python --version`. uv is optional for users and preferred for contributors. cloudflared is installed in part G; Ollama is optional in part H. Allow disk/RAM for Python dependencies and FastEmbed; optional local LLMs need additional resources.
 
 You need a Neon database supporting `vector`, its credentials, a ChatGPT account/workspace permitted to create custom read/write MCP connections, and a Claude account permitted to add a custom connector. No local PostgreSQL or Docker is needed for this Neon setup.
 
-Install Git and uv if absent, then reopen PowerShell for PATH changes:
+Install Git if absent, then reopen PowerShell for PATH changes:
 
 ```powershell
 winget install --id Git.Git --exact
-winget install --id astral-sh.uv --exact
 git --version
-uv --version
+python --version
 ```
 
-See [uv installation](https://docs.astral.sh/uv/getting-started/installation/) for alternatives. Cloudflared installation is in part G; optional Ollama is in part H. Do not install replacements or start another tunnel on the working demo laptop.
+Git, Python, cloudflared, and optional Ollama are separate applications. **Neon is hosted**, not installed locally. **FastEmbed is a Python dependency** installed by the requirements file. Ollama itself is not a pip dependency. Do not install replacements or start another tunnel on the working demo laptop.
 
 ### B. Clone repository
 
@@ -141,13 +144,56 @@ Run backend commands from `C:\Projects\New-Recall-Fabric\Capstone-RecallFabric-C
 
 ### C. Create Python environment/install dependencies
 
+#### Simple installation (pip)
+
+Run from the repository root using Python 3.12. Create a new environment; do not replace an existing working `.venv`:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+```
+
+If PowerShell blocks activation, this changes execution policy **only for the current PowerShell process**, not the user or machine:
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\.venv\Scripts\Activate.ps1
+```
+
+Install the Python dependencies required to run RecallFabric:
+
+```powershell
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+```
+
+Run from the repository root because the generated file includes `-e .`, which installs RecallFabric's own `src` package. Third-party versions are pinned from the canonical lockfile. If you prefer not to activate, use `.venv\Scripts\python.exe` instead of `python` in the pip commands; no execution-policy change is then needed.
+
+Contributors who need tests and linting can additionally install:
+
+```powershell
+python -m pip install -r requirements-dev.txt
+```
+
+[requirements-dev.txt](requirements-dev.txt) is a complete generated runtime-plus-development export, so it also works by itself. It adds the existing `dev` group (pytest, Ruff, and evaluation plotting dependencies); no new development tools or versions are invented.
+
+#### Preferred development installation (uv)
+
+Alternatively, use uv for the repository's lockfile-based developer workflow. Install it using the [official instructions](https://docs.astral.sh/uv/getting-started/installation/) or:
+
+```powershell
+winget install --id astral-sh.uv --exact
+```
+
+Reopen PowerShell, then run from the repository root:
+
 ```powershell
 uv python install 3.12
 uv sync --locked --python 3.12
 .venv\Scripts\python.exe --version
 ```
 
-Use the explicit virtual-environment executable; activation and execution-policy changes are unnecessary. `uv.lock` pins dependencies. Do not copy `.venv` between devices.
+Choose either installation path; both use the same canonical package versions. The uv path includes the default development group and does not require environment activation. Subsequent launch commands use the explicit `.venv` executable for either path. Do not copy `.venv` between devices. First-time FastEmbed model preparation is in part E, separate from installing its Python package.
 
 <a id="configuration"></a>
 
@@ -389,6 +435,17 @@ MCP receives tool calls, not ordinary conversation messages. Clients decide what
 
 ## Development and testing
 
+### Keep pip exports synchronized
+
+`pyproject.toml` and `uv.lock` remain canonical. Do not hand-edit versions in the requirements files. After an intentional dependency/lockfile change, regenerate both from the repository root:
+
+```powershell
+uv export --locked --no-dev --no-hashes --output-file requirements.txt
+uv export --locked --no-default-groups --group dev --no-hashes --output-file requirements-dev.txt
+```
+
+CI repeats these exports and fails if the committed files differ. Runtime requirements exclude the `dev` group; development requirements include it plus runtime. Both preserve platform markers and pinned third-party versions. Hashes are omitted so pip can install the editable local project (`-e .`); the existing build-backend constraints remain in `pyproject.toml`. Package installation does not install cloudflared/Ollama applications, provision Neon, run migrations, or download FastEmbed model weights.
+
 Focused checks, without benchmarks or hosted migrations:
 
 ```powershell
@@ -490,4 +547,4 @@ Historical capstone reports/evaluation artifacts are retained as snapshots, not 
 
 ### Verification scope
 
-Commands and paths were checked against the repository, PowerShell syntax, environment validation, and official client documentation. This documentation-only update does not start/restart services, create a tunnel, modify origins, run migrations, or claim a new live client connection. Earlier public verification is historical evidence, not a promise that a temporary hostname remains available. Follow Section 1 to verify your own installation.
+The pip runtime path was verified in a disposable Python 3.12 environment with system/user site packages disabled: runtime imports, all applicable locked pins, FastAPI lifespan and `/health`, and FastEmbed passage/query inference passed. Cached model weights were reused; Python packages came only from the new environment. Commands and paths were also checked against PowerShell syntax, environment validation, and official client documentation. This setup update does not restart live services, create a tunnel, modify origins, run migrations, or claim a new live client connection. Earlier public verification is historical evidence, not a promise that a temporary hostname remains available. Follow Section 1 to verify your own installation.
