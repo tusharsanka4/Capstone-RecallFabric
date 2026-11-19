@@ -1,5 +1,8 @@
 # RecallFabric Final Acceptance Report
 
+Historical capstone evidence. For current installation and cross-client MCP setup,
+use the [canonical README](README.md); status totals below describe the original checkpoint.
+
 ## 1. Executive summary
 
 Audit target:

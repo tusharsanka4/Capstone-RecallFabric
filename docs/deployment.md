@@ -1,5 +1,10 @@
 # Production Cloud Deployment Guide
 
+For the current local Windows + Neon + Quick Tunnel demonstration, start with the
+[canonical README](../README.md). This document retains alternative cloud workflows;
+they are not required for the zero-hosting-cost demo. Keep one backend worker and use
+the public HTTPS origin appropriate to that deployment.
+
 This guide covers deploying RecallFabric to cloud platforms (Render, Fly.io, Railway) connected to a managed cloud PostgreSQL database (Neon or Supabase).
 
 ---

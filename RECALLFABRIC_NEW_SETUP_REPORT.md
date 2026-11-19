@@ -1,5 +1,8 @@
 # RecallFabric Complete Checkout Setup Report
 
+Historical capstone evidence. For current installation and cross-client MCP setup,
+use the [canonical README](README.md); do not replace a working deployment from this snapshot.
+
 ## 1. New project path
 
 ```text

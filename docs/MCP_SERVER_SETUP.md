@@ -7,17 +7,10 @@ writes; and returns sanitized MCP errors (`isError=true`) for failed operations.
 
 ## Prerequisites
 
-From the repository root, install dependencies, start PostgreSQL, migrate, and prepare
-the local embedding model:
-
-```powershell
-$env:UV_CACHE_DIR = "$PWD\.uv-cache"
-$env:UV_PYTHON_INSTALL_DIR = "$PWD\.uv-python"
-uv sync --locked
-docker compose up -d --wait db
-uv run alembic upgrade head
-uv run python -m recallfabric.embeddings --download
-```
+Follow the [canonical README setup](../README.md) for dependencies, Neon/TLS,
+safe migrations, model preparation, account provisioning, and the public HTTP endpoint.
+This reference retains the distinct stdio and tool-lifecycle workflows. A local Docker
+database is an alternative for isolated development, not a requirement for Neon.
 
 Use the existing administration API to create an account-scoped API key. Keep the key in
 the client host's secret configuration, not in source control. The server derives account

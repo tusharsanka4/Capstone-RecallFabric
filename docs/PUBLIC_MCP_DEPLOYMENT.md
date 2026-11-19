@@ -1,5 +1,9 @@
 # Public MCP deployment handoff
 
+Historical security/deployment handoff. Database and live-client status below reflect
+that checkpoint, not current readiness. Use the [canonical README](../README.md) for
+fresh-device setup, account provisioning, and the current local-tunnel workflow.
+
 Prepared 2026-11-19. No deployment or hosted database migration was performed.
 
 ## Security changes

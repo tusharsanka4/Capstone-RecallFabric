@@ -1,16 +1,22 @@
 # Connecting to RecallFabric via MCP
 
+For current ChatGPT/Claude OAuth connections, account provisioning, and Quick Tunnel
+setup, use the [canonical README](../../README.md). This reference covers optional
+IDE configurations and legacy bridges; these clients may have different UI versions.
+
 RecallFabric ships as a Model Context Protocol (MCP) server supporting:
-1. **Streamable HTTP Transport (`/mcp`)**: Connect Claude Desktop, Cursor, Windsurf, VS Code, and custom agent frameworks over the internet using standard HTTP POST requests with Server-Sent Events (SSE) streaming.
+1. **Streamable HTTP Transport (`/mcp/`)**: Remote HTTP MCP, with JSON responses and stateless mode for Quick Tunnel; SSE is available in other supported deployments.
 2. **Local Stdio Transport**: Run directly inside local agent environments via `python -m recallfabric.mcp_server`.
 
 ---
 
 ## Remote Connection Configurations
 
-### 1. Claude Desktop
+### 1. Legacy Claude Desktop bridge (optional)
 
-Claude Desktop connects to remote MCP servers using the `mcp-remote` bridge connector.
+Current Claude supports direct remote OAuth connectors; follow the main README.
+The following legacy `mcp-remote` bridge is an optional alternative for clients using
+local `mcpServers` configuration, not a prerequisite for Claude's custom connector.
 
 Edit your Claude Desktop configuration file:
 - **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
@@ -116,8 +122,11 @@ Standard JSON configuration schema compatible with modern MCP tools:
 - **Rate Limiting & Size Limits**: Remote calls to `/mcp` are protected by token-bucket rate limiting (`RECALLFABRIC_RATE_LIMIT_RPS` and `RECALLFABRIC_RATE_LIMIT_BURST`) and request body limits (`RECALLFABRIC_MAX_REQUEST_SIZE_BYTES`).
 - **Audit Logging**: All MCP tool executions (`remember`, `recall`, `forget`, etc.) and authentication events are logged to the PostgreSQL audit trail with timestamps and client IP addresses.
 
-### Known Limitation: OAuth 2.1
-The official MCP ecosystem currently relies primarily on Bearer API keys and HTTP headers for remote authentication. While OAuth 2.1 authorization-code flow is drafted in MCP specifications, client implementations (such as Claude Desktop and IDE connectors) do not yet offer standardized browser-based authorization flows. As a result, RecallFabric uses Bearer API keys for production remote deployment, and lists OAuth 2.1 authorization code grant as a planned future enhancement when client support stabilizes.
+### OAuth support
+RecallFabric implements browser authorization, PKCE S256, dynamic client registration,
+resource/audience binding, scopes, and refresh rotation. ChatGPT and Claude use separate
+OAuth grants against the same RecallFabric account. Direct account-key headers remain
+supported for SDK probes and compatible IDE clients. Follow the main README for consent.
 
 ---
 
@@ -128,11 +137,12 @@ The official MCP ecosystem currently relies primarily on Bearer API keys and HTT
 | Tool | Signature | When LLM Calls It |
 |---|---|---|
 | `remember` | `(content: str, type="fact", importance=0.5, extract=False)` | Call when the user states a durable fact, preference, profile attribute, constraint, or goal. Set `extract=true` to parse multiple facts from conversation turns. |
-| `recall` | `(query: str, limit=5, type=None)` | Call at the start of a conversation and before answering questions about the user to inject relevant context. |
-| `forget` | `(memory_id=None, query=None, confirm=False)` | Call when the user asks to remove or forget information. Supports direct deletion or semantic search with confirmation. |
+| `recall` | `(query: str, limit=5, type=None)` | Recall when stored prior context is relevant; skip self-contained general knowledge. |
+| `forget` | `(memory_id=None, query=None, confirm=False, expected_version=None)` | Preview first; confirmed deletion requires the current expected version. |
 | `list_memories` | `(type=None, status="active", limit=50)` | Call when reviewing user memory inventory or filtering by category. |
-| `update_memory` | `(id: str, content=None, type=None, importance=None)` | Call when the user updates or refines an existing memory. |
+| `update_memory` | `(id: str, expected_version: int, content=None, type=None, importance=None)` | Call when the user updates or refines an existing memory. |
 | `get_memory_history` | `(id: str)` | Call when inspecting provenance and audit history of a memory. |
+| `get_provenance` | `(id: str)` | Inspect owner-scoped source/event records. |
 | `get_profile` | `(limit=20)` | Call at session start to obtain a structured summary of active memories grouped by category. |
 
 ### Resources
@@ -145,113 +155,9 @@ The official MCP ecosystem currently relies primarily on Bearer API keys and HTT
 
 ---
 
-## Step-by-Step cURL Handshake Test
+## Protocol verification
 
-You can verify your remote RecallFabric MCP server from the command line using standard `curl` commands:
-
-### Step 1: Initialize MCP Session
-```bash
-curl -i -X POST https://<your-host>/mcp \
-  -H "Authorization: Bearer <your-api-key>" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "jsonrpc": "2.0",
-    "id": 1,
-    "method": "initialize",
-    "params": {
-      "protocolVersion": "2024-11-05",
-      "capabilities": {},
-      "clientInfo": {"name": "curl-test", "version": "1.0"}
-    }
-  }'
-```
-*Take note of the `mcp-session-id` header in the HTTP response.*
-
-### Step 2: Acknowledge Initialization
-```bash
-curl -i -X POST https://<your-host>/mcp \
-  -H "Authorization: Bearer <your-api-key>" \
-  -H "mcp-session-id: <session-id-from-step-1>" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "jsonrpc": "2.0",
-    "method": "notifications/initialized",
-    "params": {}
-  }'
-```
-
-### Step 3: List Tools
-```bash
-curl -i -X POST https://<your-host>/mcp \
-  -H "Authorization: Bearer <your-api-key>" \
-  -H "mcp-session-id: <session-id-from-step-1>" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "jsonrpc": "2.0",
-    "id": 2,
-    "method": "tools/list",
-    "params": {}
-  }'
-```
-
-### Step 4: Call `remember` Tool
-```bash
-curl -i -X POST https://<your-host>/mcp \
-  -H "Authorization: Bearer <your-api-key>" \
-  -H "mcp-session-id: <session-id-from-step-1>" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "jsonrpc": "2.0",
-    "id": 3,
-    "method": "tools/call",
-    "params": {
-      "name": "remember",
-      "arguments": {
-        "content": "User prefers concise Python 3.12 code using type hints",
-        "type": "preference",
-        "importance": 0.9
-      }
-    }
-  }'
-```
-
-### Step 5: Call `recall` Tool
-```bash
-curl -i -X POST https://<your-host>/mcp \
-  -H "Authorization: Bearer <your-api-key>" \
-  -H "mcp-session-id: <session-id-from-step-1>" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "jsonrpc": "2.0",
-    "id": 4,
-    "method": "tools/call",
-    "params": {
-      "name": "recall",
-      "arguments": {
-        "query": "coding preferences",
-        "limit": 3
-      }
-    }
-  }'
-```
-
-### Step 6: Read `memory_profile` Resource
-```bash
-curl -i -X POST https://<your-host>/mcp \
-  -H "Authorization: Bearer <your-api-key>" \
-  -H "mcp-session-id: <session-id-from-step-1>" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "jsonrpc": "2.0",
-    "id": 5,
-    "method": "resources/read",
-    "params": {
-      "uri": "memory://profile"
-    }
-  }'
-```
-
----
+Use the authenticated official SDK probe in the [main README](../../README.md#13-verify-public-https-and-mcp). It initializes the negotiated protocol and verifies tools, resources, and prompts without writing sample memories. The old manual session/cURL sequence was specific to a stateful transport and is unnecessary for the current stateless Quick Tunnel setup.
 
 ## Non-MCP Clients (Custom GPTs, Gemini Gems, & OpenAI-Compatible Proxy)
 

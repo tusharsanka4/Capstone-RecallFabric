@@ -21,3 +21,8 @@ ollama.zip
 evaluation/results/*.json
 evaluation/results/20*
 benchmarks/memory_accuracy/results/
+
+# Local account and connector credentials; never source-controlled.
+account.json
+.recallfabric-demo/
+.cloudflared/
