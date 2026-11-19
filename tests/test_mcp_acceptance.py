@@ -1,5 +1,6 @@
 """Authenticated official MCP client against real PostgreSQL in disposable schemas."""
 
+import json
 import os
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
@@ -123,6 +124,78 @@ async def call(session, tool, arguments):
     result = await session.call_tool(tool, arguments)
     assert not result.is_error, str(result.content)
     return result.structured_content
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("credential_kind", ["api_key", "oauth"])
+async def test_concurrent_tenants_cannot_read_or_mutate_each_other(database, credential_kind):
+    app, engine, keys = database
+    if credential_kind == "oauth":
+        with Session(engine) as db, db.begin():
+            for user in ("alice", "bob"):
+                raw = uuid4().hex
+                keys[user] = raw
+                db.add(
+                    OAuthAccessToken(
+                        token_hash=hash_oauth_token(raw),
+                        client_id="isolation-test",
+                        resource=app.state.settings.oauth_resource(),
+                        user_id=user,
+                        scope="memory:read memory:write",
+                        expires_at=datetime.now(UTC) + timedelta(hours=1),
+                    )
+                )
+    secrets = {"alice": "Private preference ALICE_CANARY", "bob": "Private preference BOB_CANARY"}
+    saved = {}
+    async with app.state.mcp_server.session_manager.run():
+        async with client(app, keys["alice"]) as alice, client(app, keys["bob"]) as bob:
+            clients = {"alice": alice, "bob": bob}
+
+            async def store(user):
+                result = await call(clients[user], "remember", {"content": secrets[user]})
+                saved[user] = result["memory"]["id"]
+
+            async with anyio.create_task_group() as group:
+                for user in clients:
+                    group.start_soon(store, user)
+            assert saved["alice"] != saved["bob"]
+
+            async def attack_and_read(user, other):
+                session = clients[user]
+                for _ in range(3):
+                    listed = await call(session, "list_memories", {})
+                    assert {m["id"] for m in listed["result"]} == {saved[user]}
+                    recalled = await call(session, "recall", {"query": secrets[other]})
+                    assert {m["id"] for m in recalled["memories"]} <= {saved[user]}
+                    profile = await call(session, "get_profile", {})
+                    assert profile["memory_count"] == 1
+                    assert secrets[other] not in json.dumps(profile)
+                    resource = await session.read_resource("memory://profile")
+                    assert secrets[other] not in resource.model_dump_json()
+                history = await session.call_tool("get_memory_history", {"id": saved[other]})
+                assert history.is_error or history.structured_content == {"result": []}
+                for tool, args in [
+                    ("get_provenance", {"id": saved[other]}),
+                    (
+                        "update_memory",
+                        {"id": saved[other], "expected_version": 1, "content": "hijacked"},
+                    ),
+                    ("forget", {"memory_id": saved[other]}),
+                    ("forget", {"memory_id": saved[other], "expected_version": 1, "confirm": True}),
+                    ("delete_memory", {"id": saved[other], "expected_version": 1}),
+                ]:
+                    result = await session.call_tool(tool, args)
+                    assert result.is_error, tool
+                    assert secrets[other] not in result.model_dump_json()
+
+            async with anyio.create_task_group() as group:
+                group.start_soon(attack_and_read, "alice", "bob")
+                group.start_soon(attack_and_read, "bob", "alice")
+    with Session(engine) as db:
+        rows = db.scalars(select(Memory)).all()
+        assert {(m.user_id, m.content, m.version) for m in rows} == {
+            (u, content, 1) for u, content in secrets.items()
+        }
 
 
 @pytest.mark.anyio
@@ -307,4 +380,3 @@ async def test_real_model_mcp_round_trip(database):
             )
             assert response["count"] == 1
             assert "Python" in response["memories"][0]["content"]
-
