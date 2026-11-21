@@ -2,198 +2,133 @@
 
 RecallFabric is a shared persistent memory layer for AI assistants using MCP. ChatGPT and Claude retain their own native memories; RecallFabric provides shared, account-scoped memories across clients. It does not automatically copy entire conversations.
 
-## QUICK START: Connect RecallFabric to ChatGPT and Claude
+## 1. Already Set Up? Launch RecallFabric
 
-Assumes Windows, a cloned repository, installed Python dependencies, configured Neon/TLS and migrations, production authentication settings, and a downloaded FastEmbed model. If anything is missing, follow [full fresh-device installation](#full-fresh-device-installation), [configuration](#configuration), and [account provisioning](#provision-the-shared-account-and-protect-its-key) below. ChatGPT/Claude supply their own LLM reasoning and invoke memory tools; **a running Ollama server is not required for normal MCP memory usage**. See the [optional local-LLM boundaries](#ollama-is-optional-for-mcp-usage).
+For a Windows machine where the repo is cloned, `.venv` and dependencies exist, `.env` and Neon are configured, a RecallFabric account exists, and `cloudflared` is installed. Otherwise, start with [Section 2 — New Device? Full Installation](#2-new-device-full-installation).
 
-### Step 1 — Start the RecallFabric backend
+### 1. Start backend
 
-In PowerShell, from the repository directory:
+Keep an already running, healthy backend; otherwise run:
 
 ```powershell
-Set-Location C:\Projects\New-Recall-Fabric\Capstone-RecallFabric-Complete
+cd "C:\Projects\New-Recall-Fabric\Capstone-RecallFabric-Complete"
+
 .venv\Scripts\python.exe -m uvicorn recallfabric.main:create_app --factory --host 127.0.0.1 --port 8000 --workers 1 --proxy-headers --forwarded-allow-ips 127.0.0.1
 ```
 
-Settings load **`.env` from the working directory**; `.env.local` is not automatically loaded. Process environment overrides `.env`. Before exposing the server, confirm production mode, authentication enabled, public signup disabled, and JSON/stateless MCP enabled as in the configuration example. Use one worker. Do not start another backend if one already owns port 8000.
+Verify in a browser or another terminal:
 
-In another terminal:
-
-```powershell
-Invoke-RestMethod http://127.0.0.1:8000/health
-Invoke-RestMethod http://127.0.0.1:8000/ready
+```text
+http://127.0.0.1:8000/health
+http://127.0.0.1:8000/ready
 ```
 
-`/health` means the process is alive (200, `status: ok`). `/ready` means DB connectivity, pgvector, migration head, and configured TLS pass (200); it **does not run an embedding inference check**. Prepare/test FastEmbed separately with `.venv\Scripts\python.exe -m recallfabric.embeddings --download`. Resolve readiness 503s before connecting clients.
+`/health` should return 200, `status: ok`. `/ready` should return 200 with database reachable, pgvector enabled, migration head matching, and SSL in use. It does not test embedding inference; see [Full Installation](#e-configure-neon-and-prepare-fastembed) if the model is missing. Settings load `.env` from the working directory, not `.env.local`; process environment takes precedence.
 
-### Step 2 — Start one Cloudflare Quick Tunnel
+### 2. Start Cloudflare Quick Tunnel
 
-If needed, install [cloudflared for Windows](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/downloads/) and reopen PowerShell:
-
-```powershell
-winget install --id Cloudflare.cloudflared --exact
-cloudflared --version
-```
-
-If an existing tunnel is working, keep it and use its existing URL. Otherwise, in a dedicated terminal:
+In a second terminal (keep an existing working tunnel instead of creating another):
 
 ```powershell
 cloudflared tunnel --protocol http2 --url http://127.0.0.1:8000 --no-autoupdate
 ```
 
-Cloudflare prints an HTTPS origin like `https://example-random-name.trycloudflare.com`. Keep this terminal running. Do not restart `cloudflared` unnecessarily: each new Quick Tunnel normally gets a new hostname. Laptop shutdown stops public access, but memories remain stored in Neon. This demonstration uses stateless MCP HTTP with JSON responses; Quick Tunnel does not support SSE. See [official Quick Tunnel limits](https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/).
+This generates a temporary hostname such as `https://example-name.trycloudflare.com`. **Keep the tunnel terminal running.** Restarting it normally changes the hostname. Laptop shutdown stops public access; Neon memories remain stored.
 
-### Step 3 — Configure the public MCP/OAuth origin
+### 3. Update public origin
 
-Edit only these settings in the ignored `.env`, substituting the actual URL printed by your tunnel:
+Open the ignored `.env` and replace both values with the actual tunnel origin:
 
 ```dotenv
-RECALLFABRIC_MCP_PUBLIC_URL=https://example-random-name.trycloudflare.com
-RECALLFABRIC_OAUTH_AUTHORIZATION_SERVER=https://example-random-name.trycloudflare.com
+RECALLFABRIC_MCP_PUBLIC_URL=https://example-name.trycloudflare.com
+RECALLFABRIC_OAUTH_AUTHORIZATION_SERVER=https://example-name.trycloudflare.com
 ```
 
-Both values are **origin only: no `/mcp`, other path, or trailing slash**. The client endpoint separately ends `/mcp/`. Keep authentication enabled, public signup disabled, and both MCP JSON/stateless settings true as shown in [configuration](#configuration).
-
-Stop **only the backend** with Ctrl+C, then rerun step 1's Uvicorn command. **Do not restart cloudflared.** If both origins already match a working connection, do not change them or restart anything just to follow this guide.
+Use **no `/mcp` and no trailing slash**. These lines must be active, **not commented with `#`**. Restart **only the backend** using step 1. **Do not restart cloudflared.** If the configured origins already match a working connection, leave them unchanged.
 
 <a id="13-verify-public-https-and-mcp"></a>
 
-### Step 4 — Verify the public endpoint
+### 4. Verify public discovery
 
-In your administrative terminal:
+Check these URLs, replacing `<tunnel>` with the actual hostname:
 
-```powershell
-$publicOrigin = 'https://YOUR-ACTUAL-NAME.trycloudflare.com'
-Invoke-RestMethod "$publicOrigin/health"
-Invoke-RestMethod "$publicOrigin/ready"
-Invoke-RestMethod "$publicOrigin/.well-known/oauth-protected-resource/mcp"
-Invoke-RestMethod "$publicOrigin/.well-known/oauth-authorization-server"
-curl.exe -sS -o NUL -w '%{http_code}' "$publicOrigin/mcp/"
+```text
+https://<tunnel>/.well-known/oauth-protected-resource/mcp
+https://<tunnel>/.well-known/oauth-authorization-server
+https://<tunnel>/ready
 ```
 
-Health/readiness/discovery should return 200. Metadata must advertise the actual HTTPS origin, protected resource `$publicOrigin/mcp`, authorization/token/registration endpoints, and PKCE S256. An unauthenticated **401 authorization challenge** from `/mcp/` is expected. Do not disable authentication to make it return 200.
+Expected: all return 200; `authorization_servers` contains the current tunnel origin, `issuer` equals that origin, and `/ready` is healthy. Resource metadata identifies the resource ending `/mcp`. An unauthenticated request to `https://<tunnel>/mcp/` should return a 401 challenge. **The account API key does not fix OAuth discovery problems**; correct the origin settings and reload the backend first.
 
-### Step 5 — Locate the RecallFabric account key
+### 5. Locate RecallFabric API key
 
-Current local demo file: **`C:\Projects\New-Recall-Fabric\.recallfabric-demo\account.json`**. It is outside the repository; ignore rules also protect similarly named local account files. Never commit or share it. The stored key field is **`api_key`**. The administrator provisioning API returns **`key`**, which the local provisioning recipe saves as **`api_key`**.
+Local file: **`C:\Projects\New-Recall-Fabric\.recallfabric-demo\account.json`**. Stored field: **`api_key`**. Never expose, share, or commit the value. The file is outside the repository; ignore rules also protect local account files. If absent, see [account provisioning/recovery](#f-provision-or-recover-the-recallfabric-account). The provisioning API returns `key`; the local recipe saves it as `api_key`.
 
-Copy without displaying the value:
+### 6. Connect ChatGPT
 
-```powershell
-$accountPath = 'C:\Projects\New-Recall-Fabric\.recallfabric-demo\account.json'
-Set-Clipboard -Value ((Get-Content -Raw -LiteralPath $accountPath | ConvertFrom-Json).api_key)
-# Paste only into the correct RecallFabric HTTPS consent page; clear afterward:
-Set-Clipboard -Value ''
+**Plugins → + → Add custom MCP server**. Name: **RecallFabric**. URL: **`https://<tunnel>/mcp/`**. Use automatic OAuth registration. Review the connection warning, create the plugin, paste `api_key` on the RecallFabric consent page, approve, and select **Continue to your connected app** if shown. Return to ChatGPT, finish installation, and confirm tools are visible and enabled.
+
+Account/workspace permissions apply; [official instructions](https://help.openai.com/en/articles/12584461-connecting-custom-mcp-servers-in-chatgpt) describe full custom read/write MCP support for Business and Enterprise/Edu. Older UIs may use Settings → Apps. For changed descriptions at the same URL, use **Plugins → RecallFabric → Refresh** where available and a fresh chat; reconnection is not normally required.
+
+### 7. Connect Claude
+
+**Customize → Connectors → Add custom connector**. Use **Web**, **Sign in now**, **Register automatically**, and **`https://<tunnel>/mcp/`**. Authorize with the **same RecallFabric account key as ChatGPT**; approve and complete continuation if shown. Confirm the connector is connected and enabled. Each client receives its own OAuth grant/tokens; do not share them.
+
+[Claude Free supports one custom connector at a time](https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp). Workspace administrators may first need to add the connector for their organization.
+
+### 8. Quick test
+
+ChatGPT:
+
+```text
+Remember that Project Orion uses Spring Boot, React and PostgreSQL.
 ```
 
-Both clients must authenticate against the **same RecallFabric account**, receiving **separate OAuth grants/tokens**. Never share OAuth access/refresh tokens between clients. If the file is absent, follow [fresh-account provisioning or existing-account recovery](#provision-the-shared-account-and-protect-its-key), not public signup. A clone does not recreate this file.
+Claude, in a fresh enabled conversation:
 
-### Step 6 — Connect ChatGPT
-
-Use [current official setup](https://help.openai.com/en/articles/12584461-connecting-custom-mcp-servers-in-chatgpt): **ChatGPT > Plugins > + > Add custom MCP server** (sometimes labeled Add MCP server). Account/workspace permission is required; full custom read/write MCP support is documented for Business and Enterprise/Edu. Older UIs may expose the equivalent under Settings > Apps.
-
-1. Name **RecallFabric**; connection URL **`https://<tunnel-host>/mcp/`**. Select OAuth/automatic registration.
-2. Review the risk warning, create/start the connection, and open OAuth consent.
-3. Paste the RecallFabric account **API key**, then approve.
-4. If shown, click **Continue to your connected app**.
-5. Return to ChatGPT; finish installation and confirm tools such as `remember`, `recall`, `list_memories`, and `update_memory` are visible. Enable/select RecallFabric in the conversation; approve writes when prompted.
-
-For description changes at the **same URL**, use **Plugins > RecallFabric > Refresh** where available, then a fresh chat. Reconnection is not normally needed.
-
-Test: **“Remember that Project Orion uses Spring Boot, React and PostgreSQL.”** Verify an actual `remember` call. In a fresh enabled chat: **“Let's continue Project Orion.”** Expected: ChatGPT recalls relevant context automatically when appropriate. Model-controlled invocation is not guaranteed; inspect tool activity rather than trusting the answer alone.
-
-### Step 7 — Connect Claude
-
-Use [Claude's current connector setup](https://support.claude.com/en/articles/11175166-get-started-with-custom-connectors-using-remote-mcp): **Claude > Customize > Connectors > Add custom connector** (the add button may be **+ Add**).
-
-1. Name **RecallFabric**, type **Web** if requested, URL **`https://<tunnel-host>/mcp/`**.
-2. Authentication: **Sign in now**; OAuth client: **Register automatically**. Workspace administrators may first need to add the connector in organization settings.
-3. Start OAuth and paste the **same RecallFabric account API key used for ChatGPT**. Approve.
-4. Complete the continuation flow if shown, return to Claude, and confirm the connector is connected and enabled for the conversation.
-
-Claude Free supports **one custom connector at a time**. If the URL changes, remove the old connector, add it with the new endpoint, and reauthorize. A backend-only restart at the same URL does not require that.
-
-Test: **“What do you know about Project Orion?”** Expected: a real RecallFabric call retrieves the memory originally stored through ChatGPT.
-
-### Step 8 — Prove cross-client memory
-
-Use isolated synthetic project data and fresh conversations with RecallFabric enabled:
-
-1. **ChatGPT:** “Remember that Project Helios is an AI-assisted developer dashboard using React, Spring Boot and PostgreSQL.” Verify successful `remember`.
-2. **Claude:** “Let's continue Project Helios.” Verify `recall` retrieves the same project.
-3. **Claude:** “Project Helios now uses FastAPI instead of Spring Boot.” Verify it recalls the current record and calls `update_memory` with its ID and `expected_version`. If not automatic, explicitly request the update.
-4. **ChatGPT:** “What backend does Project Helios use now?” Verify current memory says **FastAPI**; Spring Boot is superseded, while React/PostgreSQL remain unchanged. History may show the old revision.
-
-This proves shared durable memory, cross-client continuity, independent OAuth grants, and common Neon-backed account state. ChatGPT/Claude supply their own reasoning; ordinary memory tools use FastEmbed and Neon rather than requiring Ollama. A plausible answer without actual tool calls does not prove the round trip.
-
-### If the tunnel URL changes
-
-Quick Tunnel addresses are temporary. Keep a working tunnel alive. For a new hostname:
-
-1. Copy the new `trycloudflare.com` origin.
-2. Update `RECALLFABRIC_MCP_PUBLIC_URL` and `RECALLFABRIC_OAUTH_AUTHORIZATION_SERVER` (origin only).
-3. Restart only RecallFabric; leave the new tunnel running.
-4. Update/recreate the ChatGPT MCP connection as required by its UI.
-5. Remove/re-add the Claude custom connector with the new URL.
-6. Reauthorize both against the **same RecallFabric account**.
-
-Neon data does not change. Old resource-bound OAuth tokens cannot be repurposed for the new hostname. See [restart behavior](#restart-behavior) below.
-
-## Architecture overview
-
-```mermaid
-flowchart TD
-    A[ChatGPT] --> T[Cloudflare Tunnel / HTTPS]
-    B[Claude] --> T
-    C[Other MCP client] --> T
-    T --> R[RecallFabric FastAPI + MCP]
-    R --> E[FastEmbed: local embeddings]
-    E --> N[(Neon PostgreSQL + pgvector)]
-    R --> N
-    R -.-> O[Optional Ollama: local chat / extraction / conflicts]
+```text
+What do you know about Project Orion?
 ```
 
-Cloudflare only exposes the locally running backend publicly. Python and FastEmbed run on the laptop; Ollama runs only for optional local-LLM workflows; Neon holds durable data. Quick Tunnel uses stateless MCP HTTP with JSON responses because it does not support SSE. This is a demo/development setup without an uptime guarantee.
+Expected: an actual RecallFabric call retrieves the memory created through ChatGPT. Check tool activity; an answer alone is not proof. Automatic invocation remains client-controlled. ChatGPT/Claude provide their own reasoning; **Ollama is not required for normal MCP memory usage**. FastEmbed provides semantic embeddings/retrieval.
 
-## Features
+> [!WARNING]
+> **If the tunnel hostname changes**, repeat only:
+>
+> 1. Update the two `.env` public-origin variables.
+> 2. Restart only the backend; keep the new tunnel running.
+> 3. Verify OAuth metadata.
+> 4. Reconnect/update ChatGPT as its UI requires.
+> 5. Recreate/update the Claude connector (remove/re-add if required).
+> 6. Reauthorize both using the same RecallFabric account.
+>
+> **Neon data remains unchanged.** Old resource-bound tokens do not apply to the new hostname.
 
-- MCP Streamable HTTP, ChatGPT custom MCP support, and Claude custom connectors.
-- Shared account-scoped memory, tenant isolation, FastEmbed, and pgvector.
-- Semantic recall, relevance filtering, entity/project-aware recall, and memory supersession.
-- Assistant-recommendation acceptance, automatic recall guidance, and conservative durable-memory guidance.
-- OAuth authorization-code flow with PKCE S256, resource/audience binding, scopes, and independent client grants.
-- Memory history and provenance.
+## 2. New Device? Full Installation
 
-Core tools: `recall`, `remember`, `update_memory`, `forget`, `list_memories`, `get_profile`, `get_memory_history`, `get_provenance`. Legacy aliases remain available. The client model controls invocation; automatic recall/write is not guaranteed.
+For a completely new Windows machine. Complete A–H in order; backend launch and client connection commands live only in Section 1.
 
-### Durable memory behavior
+RecallFabric's Python dependencies can be installed in one command using [requirements.txt](requirements.txt). Applications such as Cloudflare Tunnel and optional Ollama are installed separately. **You do not need to learn or install uv just to run RecallFabric.**
 
-Natural durable statements such as “My secondary monitor is vertical for coding” or “Nova now uses Django” qualify without “remember this.” Temporary feelings, tentative plans, hypotheticals, quotations, general knowledge, and unaccepted assistant recommendations do not. Routine save narration is discouraged.
+Install Python + Git → clone → create `.venv` → install requirements → configure `.env` + Neon → install cloudflared → launch using Section 1.
 
-MCP receives tool calls, not ordinary conversation messages. Clients decide what to save. Use recall plus versioned update_memory for changed state, rather than introducing contradictory active memories. Current user corrections take precedence over older memory.
+### A. Install prerequisites
 
-## Full fresh-device installation
-
-The Quick Start above assumes setup is complete. On a new Windows device, follow this section, create the [environment configuration](#configuration) before database/model checks, then return to the Quick Start. Ollama installation is optional and documented later.
-
-### Fresh Windows device prerequisites
-
-Use Windows 10 22H2 or newer, PowerShell, Git, uv, and **Python 3.12** (the CI/Docker version; package requirement >=3.12). Allow disk/RAM for dependencies and FastEmbed. Optional local Ollama models need additional disk/RAM; a GPU is optional.
+Install **Git and Python 3.12** (the CI/Docker version; package requirement >=3.12). Use Windows 10 22H2 or newer and PowerShell. Install Python from the [official Windows downloads](https://www.python.org/downloads/windows/), enabling its PATH option, then reopen PowerShell and verify `python --version`. uv is optional for users and preferred for contributors. cloudflared is installed in part G; Ollama is optional in part H. Allow disk/RAM for Python dependencies and FastEmbed; optional local LLMs need additional resources.
 
 You need a Neon database supporting `vector`, its credentials, a ChatGPT account/workspace permitted to create custom read/write MCP connections, and a Claude account permitted to add a custom connector. No local PostgreSQL or Docker is needed for this Neon setup.
 
-Install Git and uv if absent, then reopen PowerShell for PATH changes:
+Install Git if absent, then reopen PowerShell for PATH changes:
 
 ```powershell
 winget install --id Git.Git --exact
-winget install --id astral-sh.uv --exact
 git --version
-uv --version
+python --version
 ```
 
-See [uv installation](https://docs.astral.sh/uv/getting-started/installation/) for alternatives. Cloudflared installation follows below; Ollama is optional for local-LLM workflows. Do not install replacements or start another tunnel on the working demo laptop.
+Git, Python, cloudflared, and optional Ollama are separate applications. **Neon is hosted**, not installed locally. **FastEmbed is a Python dependency** installed by the requirements file. Ollama itself is not a pip dependency. Do not install replacements or start another tunnel on the working demo laptop.
 
-### Clone the working branch
+### B. Clone repository
 
 Choose another empty parent if this clone location exists:
 
@@ -207,7 +142,50 @@ git branch --show-current
 
 Run backend commands from `C:\Projects\New-Recall-Fabric\Capstone-RecallFabric-Complete`, including in each new terminal. A clone contains neither credentials nor the protected account file.
 
-### Python environment
+### C. Create Python environment/install dependencies
+
+#### Simple installation (pip)
+
+Run from the repository root using Python 3.12. Create a new environment; do not replace an existing working `.venv`:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+```
+
+If PowerShell blocks activation, this changes execution policy **only for the current PowerShell process**, not the user or machine:
+
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+.\.venv\Scripts\Activate.ps1
+```
+
+Install the Python dependencies required to run RecallFabric:
+
+```powershell
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+```
+
+Run from the repository root because the generated file includes `-e .`, which installs RecallFabric's own `src` package. Third-party versions are pinned from the canonical lockfile. If you prefer not to activate, use `.venv\Scripts\python.exe` instead of `python` in the pip commands; no execution-policy change is then needed.
+
+Contributors who need tests and linting can additionally install:
+
+```powershell
+python -m pip install -r requirements-dev.txt
+```
+
+[requirements-dev.txt](requirements-dev.txt) is a complete generated runtime-plus-development export, so it also works by itself. It adds the existing `dev` group (pytest, Ruff, and evaluation plotting dependencies); no new development tools or versions are invented.
+
+#### Preferred development installation (uv)
+
+Alternatively, use uv for the repository's lockfile-based developer workflow. Install it using the [official instructions](https://docs.astral.sh/uv/getting-started/installation/) or:
+
+```powershell
+winget install --id astral-sh.uv --exact
+```
+
+Reopen PowerShell, then run from the repository root:
 
 ```powershell
 uv python install 3.12
@@ -215,9 +193,70 @@ uv sync --locked --python 3.12
 .venv\Scripts\python.exe --version
 ```
 
-Use the explicit virtual-environment executable; activation and execution-policy changes are unnecessary. `uv.lock` pins dependencies. Do not copy `.venv` between devices.
+Choose either installation path; both use the same canonical package versions. The uv path includes the default development group and does not require environment activation. Subsequent launch commands use the explicit `.venv` executable for either path. Do not copy `.venv` between devices. First-time FastEmbed model preparation is in part E, separate from installing its Python package.
 
-### Neon, TLS, pgvector, and migrations
+<a id="configuration"></a>
+
+### D. Configure `.env`
+
+Create `.env` in the repository root; do not overwrite an existing file. Replace the admin-secret/database placeholders locally before starting. The example below deliberately uses ASCII encoding for Windows PowerShell compatibility and contains no real credentials.
+
+```powershell
+if (Test-Path -LiteralPath .env) { throw '.env exists; review without overwriting.' }
+@'
+RECALLFABRIC_ENVIRONMENT=production
+RECALLFABRIC_AUTH_ENABLED=true
+RECALLFABRIC_ALLOW_PUBLIC_SIGNUP=false
+RECALLFABRIC_ADMIN_TOKEN=REPLACE_WITH_A_LONG_RANDOM_SECRET
+RECALLFABRIC_DATABASE_URL=postgresql://USER:URL_ENCODED_PASSWORD@YOUR-ENDPOINT.neon.tech/neondb?sslmode=require
+RECALLFABRIC_DB_SSLMODE=require
+RECALLFABRIC_RUN_MIGRATIONS=false
+RECALLFABRIC_WORKERS=1
+RECALLFABRIC_MCP_PUBLIC_URL=https://replace-me.trycloudflare.com
+RECALLFABRIC_OAUTH_AUTHORIZATION_SERVER=https://replace-me.trycloudflare.com
+RECALLFABRIC_OAUTH_SCOPES=memory:read memory:write
+RECALLFABRIC_LLM_PROVIDER=ollama
+RECALLFABRIC_ALLOW_LOCAL_OLLAMA=true
+RECALLFABRIC_EMBEDDING_PROVIDER=fastembed
+RECALLFABRIC_EMBEDDING_MODEL=BAAI/bge-small-en-v1.5
+RECALLFABRIC_MCP_JSON_RESPONSE=true
+RECALLFABRIC_MCP_STATELESS_HTTP=true
+'@ | Set-Content -LiteralPath .env -Encoding ascii
+```
+
+#### Required for this authenticated setup
+
+- `RECALLFABRIC_DATABASE_URL`: the intended Neon PostgreSQL URL; URL-encode reserved password characters. It overrides separate DB connection fields.
+- `RECALLFABRIC_DB_SSLMODE=require`: retain `sslmode=require` in the URL too.
+- `RECALLFABRIC_ENVIRONMENT=production`, `RECALLFABRIC_AUTH_ENABLED=true`, `RECALLFABRIC_ALLOW_PUBLIC_SIGNUP=false`: keep authentication and administrator-controlled accounts.
+- `RECALLFABRIC_ADMIN_TOKEN`: a long random admin secret, distinct from the account API key.
+- `RECALLFABRIC_EMBEDDING_PROVIDER=fastembed`, `RECALLFABRIC_EMBEDDING_MODEL=BAAI/bge-small-en-v1.5`: explicit reproducible embedding configuration (384 dimensions); preserve compatibility with stored vectors.
+
+Generate an admin secret with a password manager, or copy a captured value without displaying it:
+
+```powershell
+$adminToken = & .venv\Scripts\python.exe -c "import secrets; print(secrets.token_urlsafe(48))"
+Set-Clipboard -Value $adminToken
+# Paste into RECALLFABRIC_ADMIN_TOKEN in the local .env editor; save.
+Set-Clipboard -Value ''
+```
+
+#### Demo-only transport/public-origin configuration
+
+- `RECALLFABRIC_MCP_PUBLIC_URL` and `RECALLFABRIC_OAUTH_AUTHORIZATION_SERVER`: placeholders until Section 1's tunnel step. Both must be the same real HTTPS **origin only**, without `/mcp` or a trailing slash; uncomment both lines.
+- `RECALLFABRIC_MCP_JSON_RESPONSE=true`, `RECALLFABRIC_MCP_STATELESS_HTTP=true`: required by this Quick Tunnel recipe, which cannot use SSE.
+- `RECALLFABRIC_LLM_PROVIDER=ollama`, `RECALLFABRIC_ALLOW_LOCAL_OLLAMA=true`: select a valid loopback backend-provider configuration under the current production validator, even when no backend LLM requests are made. These do **not** start or require an Ollama server for normal MCP usage. See optional settings in part H; hosted providers remain alternatives.
+
+#### Optional settings
+
+- `RECALLFABRIC_WORKERS=1`: default one; the launch command explicitly uses one worker.
+- `RECALLFABRIC_RUN_MIGRATIONS=false`: default false; used by Docker entrypoint, not Uvicorn. Migrate explicitly only after confirming the target.
+- `RECALLFABRIC_OAUTH_SCOPES=memory:read memory:write`: existing default; retain both for the demonstration.
+- Local chat/extraction provider/model overrides are described in part H.
+
+`.env` is loaded from the working directory; `.env.local` is not automatically loaded. Process environment takes precedence. The broad [.env.example](.env.example) is a settings reference, not another mandatory template. If using it as a base, clear its default `RECALLFABRIC_DB_PASSWORD` for a Neon URL; production rejects the local default password. No hosted LLM API key is needed for this configuration. Do not change relevance/entity settings during setup.
+
+### E. Configure Neon and prepare FastEmbed
 
 In Neon, select the intended project, branch, database, and role. Obtain the connection string from **Connect**, retain TLS, and save only in `.env`. Existing data requires the **same database branch and account identity**.
 
@@ -238,31 +277,19 @@ Repository head: **`e1a2b3c4d501`**, the OAuth persistence migration. The existi
 
 For existing databases, review pending migrations and arrange a backup before an authorized upgrade. Never reset a database or delete volumes as a shortcut. Neon SQL can check `SELECT extversion FROM pg_extension WHERE extname='vector';`. Readiness below checks connectivity/vector/revision/TLS. Do not print the database URL.
 
-### FastEmbed and local startup
-
-Download/verify the configured model once; first use needs internet:
+After configuration and database checks, prepare FastEmbed once (first download needs internet):
 
 ```powershell
 .venv\Scripts\python.exe -m recallfabric.embeddings --download
 ```
 
-Keep the backend running in a dedicated terminal:
+This verifies passage/query inference. `/ready` checks database/vector/migration/TLS, not embeddings.
 
-```powershell
-Set-Location C:\Projects\New-Recall-Fabric\Capstone-RecallFabric-Complete
-.venv\Scripts\python.exe -m uvicorn recallfabric.main:create_app --factory --host 127.0.0.1 --port 8000 --workers 1 --proxy-headers --forwarded-allow-ips 127.0.0.1
-```
+<a id="provision-the-shared-account-and-protect-its-key"></a>
 
-Use one worker; do not start a second backend on port 8000. Startup does not migrate the database. In another terminal:
+### F. Provision or recover the RecallFabric account
 
-```powershell
-Invoke-RestMethod http://127.0.0.1:8000/health
-Invoke-RestMethod http://127.0.0.1:8000/ready
-```
-
-`/health`: 200, `status: ok`. `/ready`: 200 with database/vector/revision checks true and `ssl_in_use: true`; fix a 503 before connecting clients. Unauthenticated `/mcp/` returns **401**, as expected. FastAPI's `create_app` supplies authentication; do not expose a separate unauthenticated MCP runner.
-
-### Provision the shared account and protect its key
+Start the backend using [Section 1, step 1](#1-start-backend) after completing D/E; no tunnel is needed for local administrator provisioning. Keep that backend running when returning to Section 1.
 
 **Current file: `C:\Projects\New-Recall-Fabric\.recallfabric-demo\account.json`. The saved key field is `api_key`; other current fields are `user_id` and `origin`.** Never display, upload, or commit its real key.
 
@@ -306,7 +333,7 @@ Remove-Variable account
 
 Both clients must authorize against this **same RecallFabric account**, receiving separate OAuth access/refresh tokens. Do not give either client the admin token, Neon password, or the other client's tokens. Different IDs mean different memories, even on the same database.
 
-### Install cloudflared and start one Quick Tunnel
+### G. Install Cloudflare tunnel tooling
 
 Use [official Cloudflare Windows downloads](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/downloads/) (64-bit MSI/executable), or the Windows package:
 
@@ -322,82 +349,9 @@ cloudflared --version
 
 If PATH has not updated, reopen the terminal. The demo's installed executable is `C:\Program Files (x86)\cloudflared\cloudflared.exe`; invoke a quoted path with PowerShell's `&` operator.
 
-**New device only:** leave this running in its own terminal. Do not replace the working demo tunnel:
+Start the tunnel only with [Section 1, step 2](#2-start-cloudflare-quick-tunnel); do not create a second tunnel on an already connected machine.
 
-```powershell
-cloudflared tunnel --protocol http2 --url http://127.0.0.1:8000 --no-autoupdate
-```
-
-This is the working port/protocol combination; HTTP/2 avoids reliance on QUIC connectivity. Quick Tunnel needs no Cloudflare account or domain. Do not add an interactive email/Access gate in front of MCP clients. See [Quick Tunnel instructions and limits](https://developers.cloudflare.com/tunnel/get-started/quick-tunnels/).
-
-## Configuration
-
-Create `.env` only on the new device. This refuses to overwrite it. Replace admin/database placeholders in a trusted local editor **before starting**. Never paste credentials into chat or commit them.
-
-```powershell
-if (Test-Path -LiteralPath .env) { throw '.env exists; review without overwriting.' }
-@'
-RECALLFABRIC_ENVIRONMENT=production
-RECALLFABRIC_AUTH_ENABLED=true
-RECALLFABRIC_ALLOW_PUBLIC_SIGNUP=false
-RECALLFABRIC_ADMIN_TOKEN=REPLACE_WITH_A_LONG_RANDOM_SECRET
-RECALLFABRIC_DATABASE_URL=postgresql://USER:URL_ENCODED_PASSWORD@YOUR-ENDPOINT.neon.tech/neondb?sslmode=require
-RECALLFABRIC_DB_SSLMODE=require
-RECALLFABRIC_RUN_MIGRATIONS=false
-RECALLFABRIC_WORKERS=1
-RECALLFABRIC_MCP_PUBLIC_URL=https://replace-me.trycloudflare.com
-RECALLFABRIC_OAUTH_AUTHORIZATION_SERVER=https://replace-me.trycloudflare.com
-RECALLFABRIC_OAUTH_SCOPES=memory:read memory:write
-RECALLFABRIC_LLM_PROVIDER=ollama
-RECALLFABRIC_CHAT_PROVIDER=ollama
-RECALLFABRIC_EXTRACTION_PROVIDER=ollama
-RECALLFABRIC_ALLOW_LOCAL_OLLAMA=true
-RECALLFABRIC_LLM_BASE_URL=http://127.0.0.1:11434/v1
-RECALLFABRIC_CHAT_MODEL=qwen2.5:3b-instruct
-RECALLFABRIC_EXTRACTION_MODEL=qwen2.5:3b-instruct
-RECALLFABRIC_EMBEDDING_PROVIDER=fastembed
-RECALLFABRIC_EMBEDDING_MODEL=BAAI/bge-small-en-v1.5
-RECALLFABRIC_MCP_JSON_RESPONSE=true
-RECALLFABRIC_MCP_STATELESS_HTTP=true
-'@ | Set-Content -LiteralPath .env -Encoding ascii
-```
-
-Use a password manager for the admin secret, or capture a generated value without printing it:
-
-```powershell
-$adminToken = & .venv\Scripts\python.exe -c "import secrets; print(secrets.token_urlsafe(48))"
-Set-Clipboard -Value $adminToken
-# Paste into RECALLFABRIC_ADMIN_TOKEN in the local .env editor; save.
-Set-Clipboard -Value ''
-```
-
-The placeholder HTTPS origins serve initial local setup only. Replace **both** with the actual tunnel origin in [Quick Start step 3](#step-3--configure-the-public-mcpoauth-origin) before authorizing clients. They contain **origin only**, without `/mcp`, another path, or a trailing slash. The client MCP URL separately ends `/mcp/`.
-
-| Variables | Purpose / requirement for this setup |
-|---|---|
-| `RECALLFABRIC_ENVIRONMENT`, `RECALLFABRIC_AUTH_ENABLED` | Production, authenticated. Production refuses disabled auth. |
-| `RECALLFABRIC_ALLOW_PUBLIC_SIGNUP` | Keep false; administrator provisioning. |
-| `RECALLFABRIC_ADMIN_TOKEN` | Required production admin secret, not the user's account key. |
-| `RECALLFABRIC_DATABASE_URL` | Required Neon URL; overrides individual DB fields. URL-encode password characters as necessary. |
-| `RECALLFABRIC_DB_SSLMODE` | Require TLS, also retaining `sslmode=require` in the URL. |
-| `RECALLFABRIC_RUN_MIGRATIONS` | Optional, default false. Controls Docker entrypoint migrations, not Uvicorn startup. Keep false. |
-| `RECALLFABRIC_WORKERS` | Optional, default 1. Also pass `--workers 1` to Uvicorn. |
-| `RECALLFABRIC_MCP_PUBLIC_URL`, `RECALLFABRIC_OAUTH_AUTHORIZATION_SERVER` | Actual external HTTPS origins for discovery, issuer, and authorization URLs. |
-| `RECALLFABRIC_OAUTH_SCOPES` | Optional, default `memory:read memory:write`; retain both for the demo. |
-| `RECALLFABRIC_LLM_PROVIDER` | Set `ollama` for the no-hosted-LLM-key path. |
-| `RECALLFABRIC_CHAT_PROVIDER`, `RECALLFABRIC_EXTRACTION_PROVIDER` | Optional overrides; explicitly set `ollama` to avoid accidental hosted-provider selection. |
-| `RECALLFABRIC_ALLOW_LOCAL_OLLAMA`, `RECALLFABRIC_LLM_BASE_URL` | Accept local-provider configuration in production and use a loopback address; this does not start or require the Ollama service for ordinary MCP tools. Never tunnel Ollama. |
-| `RECALLFABRIC_CHAT_MODEL`, `RECALLFABRIC_EXTRACTION_MODEL` | Explicit working model `qwen2.5:3b-instruct`. |
-| `RECALLFABRIC_EMBEDDING_PROVIDER`, `RECALLFABRIC_EMBEDDING_MODEL` | FastEmbed, `BAAI/bge-small-en-v1.5`, 384 dimensions; match existing stored vectors. |
-| `RECALLFABRIC_MCP_JSON_RESPONSE`, `RECALLFABRIC_MCP_STATELESS_HTTP` | Both true for Quick Tunnel. Authentication stays enabled. |
-
-`.env` loads from the working directory; `.env.local` is not automatically loaded. Process environment overrides `.env`. The broad [.env.example](.env.example) is a settings reference, not this production recipe. If using it as a base, clear its default `RECALLFABRIC_DB_PASSWORD` for a Neon URL; production rejects the local default password. No OpenAI/Anthropic/Gemini key is needed here. Leave relevance/entity settings unchanged.
-
-The Ollama provider/model entries select a valid optional backend provider; they do not start Ollama or route ChatGPT/Claude reasoning through it. The production validator requires the explicit local opt-in when that provider is selected, even if no local-LLM request is made. A running provider is needed only for the server-side LLM paths described below; hosted providers remain supported alternatives.
-
-## Ollama and local extraction
-
-### Ollama is optional for MCP usage
+### H. Optional Ollama setup
 
 ```text
 ChatGPT or Claude -> their own LLM -> RecallFabric MCP tools -> FastEmbed -> Neon + pgvector
@@ -408,8 +362,6 @@ A running Ollama server is not required for normal `remember` (`extract=false`),
 Ollama support remains available for local RecallFabric `/chat`, extraction workflows, development/testing, and standalone operation where the MCP host is not supplying the reasoning. The current optional local model is `qwen2.5:3b-instruct`.
 
 **Existing implementation boundary:** `remember(extract=true)` invokes the configured extraction LLM. Ordinary `remember` may also invoke that provider to classify an ambiguous conflict with an existing memory; provider failure skips that conflict check rather than preventing storage. It may add latency and does not guarantee automatic supersession. For reliable changed-state updates without a backend LLM, the client should recall the current record and call `update_memory` with its ID and `expected_version`. These paths are documented as implemented; no production behavior is changed here.
-
-### Optional local Ollama installation and startup
 
 Install [Ollama for Windows](https://docs.ollama.com/windows) using its [official installer](https://ollama.com/download/windows). Reopen PowerShell:
 
@@ -432,9 +384,67 @@ $body = @{model='qwen2.5:3b-instruct'; prompt='Reply with OK.'; stream=$false} |
 (Invoke-RestMethod -Method Post -Uri http://127.0.0.1:11434/api/generate -ContentType application/json -Body $body).response
 ```
 
-The working model is [`qwen2.5:3b-instruct`](https://ollama.com/library/qwen2.5:3b-instruct). Ollama handles extraction, conflict decisions, and optional backend chat. **FastEmbed remains the embedding provider**; do not switch embeddings to Ollama. Local-production Ollama requires the explicit loopback opt-in below.
+The working model is [`qwen2.5:3b-instruct`](https://ollama.com/library/qwen2.5:3b-instruct). Ollama handles extraction, conflict decisions, and optional backend chat. **FastEmbed remains the embedding provider**; do not switch embeddings to Ollama. Local-production Ollama uses the explicit loopback opt-in in part D.
+
+If enabling those optional local workflows, set these overrides in the existing ignored `.env` (the provider selector/production opt-in are already in part D):
+
+```dotenv
+RECALLFABRIC_CHAT_PROVIDER=ollama
+RECALLFABRIC_EXTRACTION_PROVIDER=ollama
+RECALLFABRIC_LLM_BASE_URL=http://127.0.0.1:11434/v1
+RECALLFABRIC_CHAT_MODEL=qwen2.5:3b-instruct
+RECALLFABRIC_EXTRACTION_MODEL=qwen2.5:3b-instruct
+```
+
+### I. Finish setup
+
+> Once installation is complete, return to **[Section 1 — Already Set Up? Launch RecallFabric](#1-already-set-up-launch-recallfabric)**.
+
+## Architecture overview
+
+```mermaid
+flowchart TD
+    A[ChatGPT] --> T[Cloudflare Tunnel / HTTPS]
+    B[Claude] --> T
+    C[Other MCP client] --> T
+    T --> R[RecallFabric FastAPI + MCP]
+    R --> E[FastEmbed: local embeddings]
+    E --> N[(Neon PostgreSQL + pgvector)]
+    R --> N
+    R -.-> O[Optional Ollama: local chat / extraction / conflicts]
+```
+
+Cloudflare only exposes the locally running backend publicly. Python and FastEmbed run on the laptop; Ollama runs only for optional local-LLM workflows; Neon holds durable data. Quick Tunnel uses stateless MCP HTTP with JSON responses because it does not support SSE. This is a demo/development setup without an uptime guarantee.
+
+## Features
+
+- MCP Streamable HTTP, ChatGPT custom MCP support, and Claude custom connectors.
+- Shared account-scoped memory, tenant isolation, FastEmbed, and pgvector.
+- Semantic recall, relevance filtering, entity/project-aware recall, and memory supersession.
+- Assistant-recommendation acceptance, automatic recall guidance, and conservative durable-memory guidance.
+- OAuth authorization-code flow with PKCE S256, resource/audience binding, scopes, and independent client grants.
+- Memory history and provenance.
+
+Core tools: `recall`, `remember`, `update_memory`, `forget`, `list_memories`, `get_profile`, `get_memory_history`, `get_provenance`. Legacy aliases remain available. The client model controls invocation; automatic recall/write is not guaranteed.
+
+### Durable memory behavior
+
+Natural durable statements such as “My secondary monitor is vertical for coding” or “Nova now uses Django” qualify without “remember this.” Temporary feelings, tentative plans, hypotheticals, quotations, general knowledge, and unaccepted assistant recommendations do not. Routine save narration is discouraged.
+
+MCP receives tool calls, not ordinary conversation messages. Clients decide what to save. Use recall plus versioned update_memory for changed state, rather than introducing contradictory active memories. Current user corrections take precedence over older memory.
 
 ## Development and testing
+
+### Keep pip exports synchronized
+
+`pyproject.toml` and `uv.lock` remain canonical. Do not hand-edit versions in the requirements files. After an intentional dependency/lockfile change, regenerate both from the repository root:
+
+```powershell
+uv export --locked --no-dev --no-hashes --output-file requirements.txt
+uv export --locked --no-default-groups --group dev --no-hashes --output-file requirements-dev.txt
+```
+
+CI repeats these exports and fails if the committed files differ. Runtime requirements exclude the `dev` group; development requirements include it plus runtime. Both preserve platform markers and pinned third-party versions. Hashes are omitted so pip can install the editable local project (`-e .`); the existing build-backend constraints remain in `pyproject.toml`. Package installation does not install cloudflared/Ollama applications, provision Neon, run migrations, or download FastEmbed model weights.
 
 Focused checks, without benchmarks or hosted migrations:
 
@@ -540,4 +550,4 @@ Historical capstone reports/evaluation artifacts are retained as snapshots, not 
 
 ### Verification scope
 
-Commands and paths were checked against the repository, PowerShell syntax, environment validation, and official client documentation. This documentation-only update does not start/restart services, create a tunnel, modify origins, run migrations, or claim a new live client connection. Earlier public verification is historical evidence, not a promise that a temporary hostname remains available. Follow the Quick Start to verify your own installation.
+The pip runtime path was verified in a disposable Python 3.12 environment with system/user site packages disabled: runtime imports, all applicable locked pins, FastAPI lifespan and `/health`, and FastEmbed passage/query inference passed. Cached model weights were reused; Python packages came only from the new environment. Commands and paths were also checked against PowerShell syntax, environment validation, and official client documentation. This setup update does not restart live services, create a tunnel, modify origins, run migrations, or claim a new live client connection. Earlier public verification is historical evidence, not a promise that a temporary hostname remains available. Follow Section 1 to verify your own installation.
